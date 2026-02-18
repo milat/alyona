@@ -1,0 +1,43 @@
+services:
+
+    alyona-php:
+        container_name: alyona-php
+        build: ./php
+        restart: ${RESTART_POLICY}
+        volumes:
+          - ${PROJECT_PATH}:/var/www/alyona
+        networks:
+          - alyona-network
+
+    alyona-nginx:
+        container_name: alyona-nginx
+        build: ./nginx
+        restart: ${RESTART_POLICY}
+        ports:
+          - "${PORT_80}:80"
+          - "${PORT_443}:443"
+        volumes:
+          - ${PROJECT_PATH}:/var/www/alyona
+          - ./nginx/conf/:/etc/nginx/conf.d/
+        networks:
+          - alyona-network
+
+    alyona-mysql:
+        container_name: alyona-mysql
+        build: ./mysql
+        restart: ${RESTART_POLICY}
+        environment:
+          MYSQL_DATABASE: ${DEFAULT_DATABASE}
+          MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+          MYSQL_USER: ${MYSQL_USER}
+          MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+        volumes:
+          - ./mysql/db:/var/lib/mysql
+        ports:
+          - "${PORT_3306}:3306"
+        networks:
+          - alyona-network
+
+networks:
+    alyona-network:
+        driver: bridge
