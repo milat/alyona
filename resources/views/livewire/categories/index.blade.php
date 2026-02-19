@@ -23,7 +23,6 @@
                     <thead>
                         <tr>
                             <th>Categoria</th>
-                            <th>Cor</th>
                             <th>Orçamento</th>
                             <th>Status</th>
                             <th class="text-end">Ações</th>
@@ -35,9 +34,9 @@
                                 $budget = $category->budgets->first();
                             @endphp
                             <tr>
-                                <td>{{ $category->description }}</td>
                                 <td>
-                                    <span class="badge" style="background: {{ $category->color }}; color: #000;">{{ $category->color }}</span>
+                                    <span class="d-inline-block rounded-circle me-2 align-middle" style="width: 12px; height: 12px; background: {{ $category->color }}; border: 1px solid #dee2e6;"></span>
+                                    <span class="align-middle">{{ $category->description }}</span>
                                 </td>
                                 <td class="text-nowrap">
                                     @if ($budget)
