@@ -59,31 +59,53 @@
                             </div>
 
                             <div class="mb-3">
-                                <label class="form-label" for="description">Descricao</label>
-                                <textarea id="description" class="form-control" wire:model.defer="description" rows="2"></textarea>
-                                @error('description')
-                                    <div class="text-danger mt-2">{{ $message }}</div>
-                                @enderror
-                            </div>
-
-                            <div class="mb-3">
                                 <label class="form-label" for="category_id">Categoria</label>
-                            <select id="category_id" class="form-select" wire:model.defer="category_id" required>
-                                <option value="">Selecione</option>
-                                @foreach ($categories as $category)
-                                    @php
-                                        $remaining = $remainingByCategory[$category->id] ?? null;
-                                    @endphp
-                                    <option value="{{ $category->id }}">
-                                        {{ $category->description }}
-                                        @if ($remaining !== null)
-                                            ({{ $remaining < 0 ? '-' : '' }}R$ {{ number_format(abs($remaining), 2, ',', '.') }} restante)
-                                        @else
-                                            (sem orcamento)
-                                        @endif
-                                    </option>
-                                @endforeach
-                            </select>
+                                @php
+                                    $selectedCategory = $categories->firstWhere('id', $category_id);
+                                @endphp
+                                <div class="dropdown w-100">
+                                    <button
+                                        class="btn btn-outline-secondary dropdown-toggle w-100 text-start d-flex align-items-center justify-content-between"
+                                        type="button"
+                                        data-bs-toggle="dropdown"
+                                        aria-expanded="false"
+                                    >
+                                        <span class="d-inline-flex align-items-center">
+                                            @if ($selectedCategory)
+                                                <span class="d-inline-block rounded-circle me-2" style="width: 10px; height: 10px; background: {{ $selectedCategory->color }}; border: 1px solid #dee2e6;"></span>
+                                                <span>{{ $selectedCategory->description }}</span>
+                                            @else
+                                                <span class="text-secondary">Selecione</span>
+                                            @endif
+                                        </span>
+                                    </button>
+                                    <ul class="dropdown-menu w-100" style="max-height: 260px; overflow-y: auto;">
+                                        @foreach ($categories as $category)
+                                            @php
+                                                $remaining = $remainingByCategory[$category->id] ?? null;
+                                            @endphp
+                                            <li>
+                                                <button
+                                                    type="button"
+                                                    class="dropdown-item d-flex justify-content-between align-items-start gap-2"
+                                                    wire:click="$set('category_id', {{ $category->id }})"
+                                                >
+                                                    <span class="d-inline-flex align-items-center">
+                                                        <span class="d-inline-block rounded-circle me-2" style="width: 10px; height: 10px; background: {{ $category->color }}; border: 1px solid #dee2e6;"></span>
+                                                        <span>{{ $category->description }}</span>
+                                                    </span>
+                                                    <small class="text-secondary text-end">
+                                                        @if ($remaining !== null)
+                                                            {{ $remaining < 0 ? '-' : '' }}R$ {{ number_format(abs($remaining), 2, ',', '.') }}
+                                                        @else
+                                                            sem orçamento
+                                                        @endif
+                                                    </small>
+                                                </button>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                </div>
                                 @error('category_id')
                                     <div class="text-danger mt-2">{{ $message }}</div>
                                 @enderror
@@ -137,6 +159,14 @@
                                 <label class="form-label" for="purchased_at">Data da compra</label>
                                 <input id="purchased_at" type="date" class="form-control" wire:model.defer="purchased_at" required>
                                 @error('purchased_at')
+                                    <div class="text-danger mt-2">{{ $message }}</div>
+                                @enderror
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label" for="description">Observação</label>
+                                <textarea id="description" class="form-control" wire:model.defer="description" rows="2"></textarea>
+                                @error('description')
                                     <div class="text-danger mt-2">{{ $message }}</div>
                                 @enderror
                             </div>

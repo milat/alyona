@@ -91,28 +91,30 @@
                                     </button>
                                 </td>
                             </tr>
-                            @if ($purchase->description)
-                                <div class="modal fade" id="purchase-desc-{{ $purchase->id }}" tabindex="-1" aria-hidden="true">
-                                    <div class="modal-dialog">
-                                        <div class="modal-content">
-                                            <div class="modal-header">
-                                                <h5 class="modal-title">Descricao da compra</h5>
-                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
-                                            </div>
-                                            <div class="modal-body">
-                                                <p class="mb-0">{{ $purchase->description }}</p>
-                                            </div>
-                                            <div class="modal-footer">
-                                                <button type="button" class="btn btn-outline-dark" data-bs-dismiss="modal">Fechar</button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            @endif
                         @endforeach
                     </tbody>
                 </table>
             </div>
+            @foreach ($purchases as $purchase)
+                @if ($purchase->description)
+                    <div class="modal fade" id="purchase-desc-{{ $purchase->id }}" tabindex="-1" aria-hidden="true" wire:ignore.self>
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Descricao da compra</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p class="mb-0">{{ $purchase->description }}</p>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-dark" data-bs-dismiss="modal">Fechar</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @endif
+            @endforeach
             <div class="mt-3">
                 {{ $purchases->links('vendor.pagination.bootstrap-5-pt') }}
             </div>

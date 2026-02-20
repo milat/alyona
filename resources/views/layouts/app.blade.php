@@ -65,6 +65,18 @@
 </script>
 <script>
     document.addEventListener('livewire:init', () => {
+        const cleanupModalBackdrop = () => {
+            const hasOpenModal = document.querySelector('.modal.show') !== null;
+            if (hasOpenModal) return;
+
+            document.querySelectorAll('.modal-backdrop').forEach((el) => el.remove());
+            document.body.classList.remove('modal-open');
+            document.body.style.removeProperty('overflow');
+            document.body.style.removeProperty('padding-right');
+        };
+
+        document.addEventListener('hidden.bs.modal', cleanupModalBackdrop);
+
         Livewire.on('purchase-saved', () => {
             const modalEl = document.getElementById('purchaseModal');
             if (! modalEl) return;
@@ -85,6 +97,8 @@
             const instance = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
             instance.hide();
         });
+
+        document.addEventListener('livewire:navigated', cleanupModalBackdrop);
     });
 </script>
 @livewireScripts
