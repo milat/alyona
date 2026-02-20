@@ -5,31 +5,23 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Category extends Model
+class HouseholdBudgetPeriodOverride extends Model
 {
     use HasFactory;
 
     protected $fillable = [
         'household_id',
-        'description',
-        'color',
-        'is_active',
-        'default_purchase_description',
+        'period_month',
+        'start_date',
     ];
 
     protected $casts = [
-        'is_active' => 'boolean',
+        'start_date' => 'date',
     ];
 
     public function household(): BelongsTo
     {
         return $this->belongsTo(Household::class);
-    }
-
-    public function budgets(): HasMany
-    {
-        return $this->hasMany(CategoryBudget::class);
     }
 }

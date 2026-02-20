@@ -28,6 +28,7 @@ class CreateModal extends Component
 
     public function openConfirm(): void
     {
+        $this->autoAssignCategoryFromDescription();
         $this->amount = $this->normalizeCurrencyValue($this->amount);
 
         $this->validate([
@@ -48,8 +49,52 @@ class CreateModal extends Component
         $this->confirming = false;
     }
 
+    public function updatedDescription(?string $value): void
+    {
+        $description = $this->normalizeDescriptionMatch($value);
+
+        if ($description === '') {
+            return;
+        }
+
+        $this->assignCategoryByNormalizedText($description);
+    }
+
+    public function autoAssignCategoryFromTitle(): void
+    {
+        $title = $this->normalizeDescriptionMatch($this->title);
+
+        if ($title === '') {
+            return;
+        }
+
+        $this->assignCategoryByNormalizedText($title);
+    }
+
+    private function assignCategoryByNormalizedText(string $normalizedText): void
+    {
+        $user = auth()->user();
+
+        if (! $user || $user->household_id === null) {
+            return;
+        }
+
+        $matchedCategory = Category::query()
+            ->where('household_id', $user->household_id)
+            ->where('is_active', true)
+            ->get(['id', 'default_purchase_description'])
+            ->first(function (Category $category) use ($normalizedText) {
+                return $this->normalizeDescriptionMatch($category->default_purchase_description) === $normalizedText;
+            });
+
+        if ($matchedCategory) {
+            $this->category_id = $matchedCategory->id;
+        }
+    }
+
     public function save(): void
     {
+        $this->autoAssignCategoryFromDescription();
         $this->amount = $this->normalizeCurrencyValue($this->amount);
 
         $data = $this->validate([
@@ -129,6 +174,18 @@ class CreateModal extends Component
         }
 
         return number_format(((int) $digits) / 100, 2, '.', '');
+    }
+
+    private function normalizeDescriptionMatch(?string $value): string
+    {
+        $normalized = preg_replace('/\\s+/u', ' ', trim((string) ($value ?? '')));
+
+        return mb_strtolower($normalized);
+    }
+
+    private function autoAssignCategoryFromDescription(): void
+    {
+        $this->updatedDescription($this->description);
     }
 
     private function resolveInstallmentDate($household, string $basePurchasedAt, int $installmentNumber): string

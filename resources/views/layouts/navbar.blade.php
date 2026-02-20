@@ -40,7 +40,10 @@
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             @if (auth()->user()->household)
-                                <li><a class="dropdown-item" href="{{ route('households.invitations.create') }}" wire:navigate><i class="bi bi-person-plus me-2"></i>Convidar usuario</a></li>
+                                <li><a class="dropdown-item" href="{{ route('households.invitations.create') }}" wire:navigate><i class="bi bi-person-plus me-2"></i>Convidar um amigo</a></li>
+                                @if (auth()->user()->household->budget_period_type === \App\Support\BudgetPeriod::FIFTH_BUSINESS_DAY)
+                                    <li><a class="dropdown-item" href="{{ route('households.period-settings') }}" wire:navigate><i class="bi bi-calendar2-week me-2"></i>Configurar 5º dia útil</a></li>
+                                @endif
                                 <li><hr class="dropdown-divider"></li>
                             @endif
                             <li>

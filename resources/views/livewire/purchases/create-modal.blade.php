@@ -52,7 +52,7 @@
                         @else
                             <div class="mb-3">
                                 <label class="form-label" for="title">Titulo</label>
-                                <input id="title" type="text" class="form-control" wire:model.defer="title" required>
+                                <input id="title" type="text" class="form-control" wire:model.defer="title" wire:blur="autoAssignCategoryFromTitle" required>
                                 @error('title')
                                     <div class="text-danger mt-2">{{ $message }}</div>
                                 @enderror
@@ -165,7 +165,7 @@
 
                             <div class="mb-3">
                                 <label class="form-label" for="description">Observação</label>
-                                <textarea id="description" class="form-control" wire:model.defer="description" rows="2"></textarea>
+                                <textarea id="description" class="form-control" wire:model.live.debounce.300ms="description" rows="2"></textarea>
                                 @error('description')
                                     <div class="text-danger mt-2">{{ $message }}</div>
                                 @enderror

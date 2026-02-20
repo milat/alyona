@@ -28,6 +28,11 @@ class Household extends Model
         return $this->hasMany(User::class);
     }
 
+    public function budgetPeriodOverrides(): HasMany
+    {
+        return $this->hasMany(HouseholdBudgetPeriodOverride::class);
+    }
+
     public static function budgetPeriodOptions(): array
     {
         return [

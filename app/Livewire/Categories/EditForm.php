@@ -4,6 +4,7 @@ namespace App\Livewire\Categories;
 
 use App\Models\Category;
 use App\Models\CategoryBudget;
+use Illuminate\Validation\Rule;
 use Livewire\Component;
 
 class EditForm extends Component
@@ -14,6 +15,7 @@ class EditForm extends Component
     public ?string $budget_amount = null;
     public ?string $currentBudgetAmount = null;
     public bool $is_active = true;
+    public ?string $default_purchase_description = null;
 
     public function mount(int $categoryId): void
     {
@@ -23,6 +25,7 @@ class EditForm extends Component
         $this->description = $category->description;
         $this->color = $category->color;
         $this->is_active = (bool) $category->is_active;
+        $this->default_purchase_description = $category->default_purchase_description;
 
         $currentBudget = $category->budgets()
             ->orderByDesc('effective_at')
@@ -36,11 +39,21 @@ class EditForm extends Component
     {
         $this->budget_amount = $this->normalizeCurrencyValue($this->budget_amount);
 
+        $user = auth()->user();
+
         $data = $this->validate([
             'description' => ['required', 'string', 'max:255'],
             'color' => ['required', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'budget_amount' => ['nullable', 'numeric', 'min:0'],
             'is_active' => ['required', 'boolean'],
+            'default_purchase_description' => [
+                'nullable',
+                'string',
+                'max:255',
+                Rule::unique('categories', 'default_purchase_description')
+                    ->ignore($this->categoryId)
+                    ->where(fn ($query) => $query->where('household_id', $user?->household_id)),
+            ],
         ]);
 
         $category = $this->getCategory($this->categoryId);
@@ -49,6 +62,7 @@ class EditForm extends Component
             'description' => $data['description'],
             'color' => $data['color'],
             'is_active' => $data['is_active'],
+            'default_purchase_description' => $data['default_purchase_description'] ?: null,
         ]);
 
         $newAmount = $data['budget_amount'] !== null && $data['budget_amount'] !== ''

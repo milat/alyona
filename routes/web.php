@@ -13,6 +13,7 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::view('/households/create', 'households.create')->name('households.create');
     Route::view('/households/invitations/create', 'households.invite')->name('households.invitations.create');
+    Route::view('/households/period-settings', 'households.period-settings')->name('households.period-settings');
     Route::view('/categories', 'categories.index')->name('categories.index');
     Route::view('/categories/create', 'categories.create')->name('categories.create');
     Route::get('/categories/{category}/edit', function (App\Models\Category $category) {

@@ -3,12 +3,16 @@
 namespace App\Support;
 
 use App\Models\Household;
+use App\Models\HouseholdBudgetPeriodOverride;
 use Carbon\Carbon;
 
 class BudgetPeriod
 {
     public const CALENDAR_MONTH = 'calendar_month';
     public const FIFTH_BUSINESS_DAY = 'fifth_business_day';
+
+    /** @var array<string, Carbon|null> */
+    private static array $overrideCache = [];
 
     /**
      * @return array{start: Carbon, end: Carbon, period_month: string}
@@ -29,15 +33,15 @@ class BudgetPeriod
             ];
         }
 
-        $currentMonthStart = self::fifthBusinessDay($reference->year, $reference->month);
+        $currentMonthStart = self::monthStartForHousehold($household, $reference->year, $reference->month);
 
         if ($reference->lt($currentMonthStart)) {
             $previous = $reference->copy()->subMonthNoOverflow();
-            $periodStart = self::fifthBusinessDay($previous->year, $previous->month);
+            $periodStart = self::monthStartForHousehold($household, $previous->year, $previous->month);
             $periodEnd = $currentMonthStart->copy()->subDay();
         } else {
             $next = $reference->copy()->addMonthNoOverflow();
-            $nextMonthStart = self::fifthBusinessDay($next->year, $next->month);
+            $nextMonthStart = self::monthStartForHousehold($household, $next->year, $next->month);
             $periodStart = $currentMonthStart;
             $periodEnd = $nextMonthStart->copy()->subDay();
         }
@@ -57,9 +61,9 @@ class BudgetPeriod
         $type = $household->budget_period_type ?? self::CALENDAR_MONTH;
 
         if ($type === self::FIFTH_BUSINESS_DAY) {
-            $start = self::fifthBusinessDay($year, $month);
+            $start = self::monthStartForHousehold($household, $year, $month);
             $next = Carbon::create($year, $month, 1)->addMonthNoOverflow();
-            $nextStart = self::fifthBusinessDay((int) $next->format('Y'), (int) $next->format('m'));
+            $nextStart = self::monthStartForHousehold($household, (int) $next->format('Y'), (int) $next->format('m'));
 
             return [
                 'start' => $start,
@@ -94,5 +98,23 @@ class BudgetPeriod
 
             $date->addDay();
         }
+    }
+
+    private static function monthStartForHousehold(Household $household, int $year, int $month): Carbon
+    {
+        $periodMonth = sprintf('%04d-%02d', $year, $month);
+        $cacheKey = $household->id . ':' . $periodMonth;
+
+        if (! array_key_exists($cacheKey, self::$overrideCache)) {
+            $override = HouseholdBudgetPeriodOverride::query()
+                ->where('household_id', $household->id)
+                ->where('period_month', $periodMonth)
+                ->first();
+
+            self::$overrideCache[$cacheKey] = $override?->start_date?->copy()->startOfDay();
+        }
+
+        return self::$overrideCache[$cacheKey]?->copy()
+            ?? self::fifthBusinessDay($year, $month);
     }
 }

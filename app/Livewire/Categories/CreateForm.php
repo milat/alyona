@@ -4,6 +4,7 @@ namespace App\Livewire\Categories;
 
 use App\Models\Category;
 use App\Models\CategoryBudget;
+use Illuminate\Validation\Rule;
 use Livewire\Component;
 
 class CreateForm extends Component
@@ -12,19 +13,27 @@ class CreateForm extends Component
     public string $color = '#FF6B6B';
     public ?string $budget_amount = null;
     public bool $is_active = true;
+    public ?string $default_purchase_description = null;
 
     public function save(): void
     {
         $this->budget_amount = $this->normalizeCurrencyValue($this->budget_amount);
+
+        $user = auth()->user();
 
         $data = $this->validate([
             'description' => ['required', 'string', 'max:255'],
             'color' => ['required', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'budget_amount' => ['nullable', 'numeric', 'min:0'],
             'is_active' => ['required', 'boolean'],
+            'default_purchase_description' => [
+                'nullable',
+                'string',
+                'max:255',
+                Rule::unique('categories', 'default_purchase_description')
+                    ->where(fn ($query) => $query->where('household_id', $user?->household_id)),
+            ],
         ]);
-
-        $user = auth()->user();
 
         if (! $user || $user->household_id === null) {
             $this->redirect(route('home'), navigate: true);
@@ -36,6 +45,7 @@ class CreateForm extends Component
             'description' => $data['description'],
             'color' => $data['color'],
             'is_active' => $data['is_active'],
+            'default_purchase_description' => $data['default_purchase_description'] ?: null,
         ]);
 
         if ($data['budget_amount'] !== null && $data['budget_amount'] !== '') {

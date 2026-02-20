@@ -34,6 +34,35 @@
             <label class="form-check-label" for="is_active">Ativa</label>
         </div>
 
+        <div class="mb-4">
+            <label class="form-label d-flex align-items-center gap-2" for="default_purchase_description">
+                <span>Título padrão da compra</span>
+                <button
+                    type="button"
+                    class="btn btn-link p-0 text-secondary"
+                    data-bs-toggle="popover"
+                    data-bs-trigger="focus"
+                    data-bs-placement="top"
+                    data-bs-content="Quando uma compra tiver o mesmo título, esta categoria será selecionada automaticamente."
+                    aria-label="Ajuda sobre título padrão da compra"
+                >
+                    <i class="bi bi-info-circle"></i>
+                </button>
+            </label>
+            <input
+                id="default_purchase_description"
+                name="default_purchase_description"
+                type="text"
+                wire:model.defer="default_purchase_description"
+                class="form-control"
+                maxlength="255"
+                placeholder="Opcional"
+            />
+            @error('default_purchase_description')
+                <div class="text-danger mt-2">{{ $message }}</div>
+            @enderror
+        </div>
+
         @include('livewire.categories.partials.budget-fields')
 
         <button type="submit" class="btn btn-warning w-100" wire:loading.attr="disabled">
