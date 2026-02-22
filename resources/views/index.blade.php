@@ -5,6 +5,8 @@
 @section('content')
     <div class="container pb-5 pt-md-5" style="padding-top: .75rem;">
         @auth
+            <livewire:household.pending-invitations />
+
             @php
                 $hasHousehold = (bool) auth()->user()->household_id;
                 $hasCategories = $hasHousehold
