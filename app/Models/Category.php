@@ -16,11 +16,13 @@ class Category extends Model
         'description',
         'color',
         'is_active',
+        'hide_from_home_chart',
         'default_purchase_description',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'hide_from_home_chart' => 'boolean',
     ];
 
     public function household(): BelongsTo
