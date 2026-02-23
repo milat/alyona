@@ -118,18 +118,21 @@ class PeriodSummary extends Component
                 'budget' => $budgetValue,
                 'remaining' => $budgetValue !== null ? $budgetValue - $spent : null,
                 'spent_color' => $spentColor,
+                'hide_from_home_chart' => (bool) $category->hide_from_home_chart,
             ];
         })->filter(fn (array $row) => $row['spent'] > 0 || $row['budget'] !== null)
             ->sortByDesc('spent')
             ->values();
 
+        $chartRows = $rows->filter(fn (array $row) => ! $row['hide_from_home_chart'])->values();
+
         $periodMonth = Carbon::createFromFormat('Y-m', $period['period_month']);
 
         $chart = [
-            'labels' => $rows->pluck('name')->values(),
-            'spent' => $rows->pluck('spent')->map(fn ($value) => round((float) $value, 2))->values(),
-            'budget' => $rows->pluck('budget')->map(fn ($value) => round((float) ($value ?? 0), 2))->values(),
-            'spentColors' => $rows->pluck('spent_color')->values(),
+            'labels' => $chartRows->pluck('name')->values(),
+            'spent' => $chartRows->pluck('spent')->map(fn ($value) => round((float) $value, 2))->values(),
+            'budget' => $chartRows->pluck('budget')->map(fn ($value) => round((float) ($value ?? 0), 2))->values(),
+            'spentColors' => $chartRows->pluck('spent_color')->values(),
         ];
 
         return view('livewire.dashboard.period-summary', [

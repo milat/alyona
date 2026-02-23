@@ -15,6 +15,7 @@ class EditForm extends Component
     public ?string $budget_amount = null;
     public ?string $currentBudgetAmount = null;
     public bool $is_active = true;
+    public bool $hide_from_home_chart = false;
     public ?string $default_purchase_description = null;
 
     public function mount(int $categoryId): void
@@ -25,6 +26,7 @@ class EditForm extends Component
         $this->description = $category->description;
         $this->color = $category->color;
         $this->is_active = (bool) $category->is_active;
+        $this->hide_from_home_chart = (bool) $category->hide_from_home_chart;
         $this->default_purchase_description = $category->default_purchase_description;
 
         $currentBudget = $category->budgets()
@@ -46,6 +48,7 @@ class EditForm extends Component
             'color' => ['required', 'string', 'regex:/^#[0-9A-Fa-f]{6}$/'],
             'budget_amount' => ['nullable', 'numeric', 'min:0'],
             'is_active' => ['required', 'boolean'],
+            'hide_from_home_chart' => ['required', 'boolean'],
             'default_purchase_description' => [
                 'nullable',
                 'string',
@@ -62,6 +65,7 @@ class EditForm extends Component
             'description' => $data['description'],
             'color' => $data['color'],
             'is_active' => $data['is_active'],
+            'hide_from_home_chart' => $data['hide_from_home_chart'],
             'default_purchase_description' => $data['default_purchase_description'] ?: null,
         ]);
 

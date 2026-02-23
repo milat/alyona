@@ -64,11 +64,13 @@
                                     @endphp
                                     <tr>
                                         <td>
-                                            <span class="badge me-2" style="background: {{ $row['color'] }};">&nbsp;</span>
-                                            {{ $row['name'] }}
+                                            <span class="d-flex align-items-center gap-2">
+                                                <span class="badge" style="background: {{ $row['color'] }};">&nbsp;</span>
+                                                <span>{{ $row['name'] }}</span>
+                                            </span>
                                         </td>
-                                        <td class="text-end {{ $spentClass }}">R$ {{ number_format($row['spent'], 2, ',', '.') }}</td>
-                                        <td class="text-end">
+                                        <td class="text-end text-nowrap {{ $spentClass }}">R$ {{ number_format($row['spent'], 2, ',', '.') }}</td>
+                                        <td class="text-end text-nowrap">
                                             @if ($row['budget'] !== null)
                                                 R$ {{ number_format($row['budget'], 2, ',', '.') }}
                                             @else

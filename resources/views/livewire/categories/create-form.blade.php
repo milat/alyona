@@ -33,6 +33,17 @@
         <label class="form-check-label" for="is_active">Ativa</label>
     </div>
 
+    <div class="form-check form-switch mb-4">
+        <input
+            id="hide_from_home_chart"
+            name="hide_from_home_chart"
+            type="checkbox"
+            class="form-check-input"
+            wire:model.defer="hide_from_home_chart"
+        />
+        <label class="form-check-label" for="hide_from_home_chart">Ocultar no gráfico da home</label>
+    </div>
+
     <div class="mb-4">
         <label class="form-label d-flex align-items-center gap-2" for="default_purchase_description">
             <span>Título padrão da compra</span>
