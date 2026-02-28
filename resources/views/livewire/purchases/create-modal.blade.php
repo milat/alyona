@@ -140,19 +140,58 @@
 
                             <div class="mb-3">
                                 <label class="form-label" for="amount">Valor (R$)</label>
-                                <input
-                                    id="amount"
-                                    type="text"
-                                    inputmode="numeric"
-                                    class="form-control"
-                                    wire:model.defer="amount"
-                                    oninput="maskHomePurchaseAmount(this)"
-                                    placeholder="0,00"
-                                    required
-                                >
+                                <div class="row g-2">
+                                    <div class="col-8">
+                                        <input
+                                            id="amount"
+                                            type="text"
+                                            inputmode="numeric"
+                                            class="form-control"
+                                            wire:model.defer="amount"
+                                            oninput="maskHomePurchaseAmount(this)"
+                                            placeholder="0,00"
+                                            required
+                                        >
+                                    </div>
+                                    <div class="col-4">
+                                        <button type="button" class="btn btn-outline-secondary w-100" wire:click="toggleCalculator">
+                                            <i class="bi bi-calculator me-1"></i> Calcular
+                                        </button>
+                                    </div>
+                                </div>
                                 @error('amount')
                                     <div class="text-danger mt-2">{{ $message }}</div>
                                 @enderror
+
+                                @if ($calculatorOpen)
+                                    <div class="border rounded p-2 mt-2" style="background-color: #d6d8db;">
+                                        <input
+                                            type="text"
+                                            class="form-control form-control-sm mb-2 text-end"
+                                            wire:model.live="calculatorExpression"
+                                            placeholder="0"
+                                        >
+                                        <div class="row g-1">
+                                            @foreach ([['7','8','9','/'], ['4','5','6','*'], ['1','2','3','-'], ['0','.','C','+']] as $line)
+                                                @foreach ($line as $token)
+                                                    <div class="col-3">
+                                                        @if ($token === 'C')
+                                                            <button type="button" class="btn btn-outline-danger btn-sm w-100" wire:click="clearCalculator">{{ $token }}</button>
+                                                        @else
+                                                            <button type="button" class="btn btn-outline-dark btn-sm w-100" wire:click="appendCalculator('{{ $token }}')">{{ $token }}</button>
+                                                        @endif
+                                                    </div>
+                                                @endforeach
+                                            @endforeach
+                                            <div class="col-6">
+                                                <button type="button" class="btn btn-outline-secondary btn-sm w-100" wire:click="backspaceCalculator">⌫</button>
+                                            </div>
+                                            <div class="col-6">
+                                                <button type="button" class="btn btn-warning btn-sm w-100" wire:click="applyCalculatorResult">Usar resultado</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                @endif
                             </div>
 
                             <div class="mb-3">
