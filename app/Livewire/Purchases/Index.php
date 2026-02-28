@@ -7,6 +7,7 @@ use App\Models\Purchase;
 use App\Support\BudgetPeriod;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
 
@@ -14,7 +15,10 @@ class Index extends Component
 {
     use WithPagination;
 
+    #[Url(as: 'mes', except: null)]
     public ?string $selectedMonth = null;
+
+    #[Url(as: 'categoria', except: null)]
     public ?string $selectedCategoryId = null;
 
     public function delete(int $purchaseId): void
@@ -114,7 +118,7 @@ class Index extends Component
                 $query->where('category_id', (int) $this->selectedCategoryId);
             }
 
-            $purchases = $query->paginate(10);
+            $purchases = $query->paginate(10)->withQueryString();
         }
 
         return view('livewire.purchases.index', [

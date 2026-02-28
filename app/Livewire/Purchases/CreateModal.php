@@ -20,6 +20,8 @@ class CreateModal extends Component
     public ?string $installments = null;
     public string $purchased_at = '';
     public bool $confirming = false;
+    public bool $calculatorOpen = false;
+    public string $calculatorExpression = '';
 
     public function mount(): void
     {
@@ -47,6 +49,45 @@ class CreateModal extends Component
     public function backToEdit(): void
     {
         $this->confirming = false;
+    }
+
+    public function toggleCalculator(): void
+    {
+        $this->calculatorOpen = ! $this->calculatorOpen;
+    }
+
+    public function appendCalculator(string $token): void
+    {
+        if (! preg_match('/^[0-9+\-*\/.]$/', $token)) {
+            return;
+        }
+
+        $this->calculatorExpression .= $token;
+    }
+
+    public function clearCalculator(): void
+    {
+        $this->calculatorExpression = '';
+    }
+
+    public function backspaceCalculator(): void
+    {
+        $this->calculatorExpression = mb_substr($this->calculatorExpression, 0, -1);
+    }
+
+    public function applyCalculatorResult(): void
+    {
+        $result = $this->evaluateCalculatorExpression($this->calculatorExpression);
+
+        if ($result === null) {
+            $this->addError('amount', 'Expressão inválida na calculadora.');
+            return;
+        }
+
+        $result = max(0, $result);
+        $this->amount = number_format($result, 2, ',', '.');
+        $this->calculatorOpen = false;
+        $this->calculatorExpression = '';
     }
 
     public function updatedDescription(?string $value): void
@@ -174,6 +215,94 @@ class CreateModal extends Component
         }
 
         return number_format(((int) $digits) / 100, 2, '.', '');
+    }
+
+    private function evaluateCalculatorExpression(string $expression): ?float
+    {
+        $expression = str_replace(',', '.', preg_replace('/\s+/', '', $expression));
+
+        if ($expression === '' || ! preg_match('/^[0-9+\-*\/.]+$/', $expression)) {
+            return null;
+        }
+
+        preg_match_all('/\d+(?:\.\d+)?|[+\-*\/]/', $expression, $matches);
+        $tokens = $matches[0] ?? [];
+
+        if ($tokens === [] || implode('', $tokens) !== $expression) {
+            return null;
+        }
+
+        $expectNumber = true;
+        $values = [];
+        $ops = [];
+
+        foreach ($tokens as $token) {
+            if (preg_match('/^\d+(?:\.\d+)?$/', $token)) {
+                if (! $expectNumber) {
+                    return null;
+                }
+                $values[] = (float) $token;
+                $expectNumber = false;
+                continue;
+            }
+
+            if ($expectNumber) {
+                return null;
+            }
+
+            while ($ops !== [] && $this->calculatorPrecedence(end($ops)) >= $this->calculatorPrecedence($token)) {
+                if (! $this->calculatorApplyTopOperation($values, $ops)) {
+                    return null;
+                }
+            }
+
+            $ops[] = $token;
+            $expectNumber = true;
+        }
+
+        if ($expectNumber) {
+            return null;
+        }
+
+        while ($ops !== []) {
+            if (! $this->calculatorApplyTopOperation($values, $ops)) {
+                return null;
+            }
+        }
+
+        return isset($values[0]) ? round((float) $values[0], 2) : null;
+    }
+
+    private function calculatorPrecedence(string $operator): int
+    {
+        return in_array($operator, ['*', '/'], true) ? 2 : 1;
+    }
+
+    private function calculatorApplyTopOperation(array &$values, array &$ops): bool
+    {
+        $operator = array_pop($ops);
+        $right = array_pop($values);
+        $left = array_pop($values);
+
+        if ($operator === null || $left === null || $right === null) {
+            return false;
+        }
+
+        $result = match ($operator) {
+            '+' => $left + $right,
+            '-' => $left - $right,
+            '*' => $left * $right,
+            '/' => $right == 0.0 ? null : $left / $right,
+            default => null,
+        };
+
+        if ($result === null || is_nan($result) || is_infinite($result)) {
+            return false;
+        }
+
+        $values[] = $result;
+
+        return true;
     }
 
     private function normalizeDescriptionMatch(?string $value): string
