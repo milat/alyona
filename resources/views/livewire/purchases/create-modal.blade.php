@@ -165,26 +165,28 @@
 
                                 @if ($calculatorOpen)
                                     <div class="border rounded p-2 mt-2" style="background-color: #d6d8db;">
+                                        <input type="hidden" id="calculatorExpressionHidden" wire:model.defer="calculatorExpression">
                                         <input
+                                            id="calculatorExpressionDisplay"
                                             type="text"
                                             class="form-control form-control-sm mb-2 text-end"
-                                            wire:model.live="calculatorExpression"
                                             placeholder="0"
+                                            readonly
                                         >
                                         <div class="row g-1">
                                             @foreach ([['7','8','9','/'], ['4','5','6','*'], ['1','2','3','-'], ['0','.','C','+']] as $line)
                                                 @foreach ($line as $token)
                                                     <div class="col-3">
                                                         @if ($token === 'C')
-                                                            <button type="button" class="btn btn-outline-danger btn-sm w-100" wire:click="clearCalculator">{{ $token }}</button>
+                                                            <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="purchaseCalcClear()">{{ $token }}</button>
                                                         @else
-                                                            <button type="button" class="btn btn-outline-dark btn-sm w-100" wire:click="appendCalculator('{{ $token }}')">{{ $token }}</button>
+                                                            <button type="button" class="btn btn-outline-dark btn-sm w-100" onclick="purchaseCalcAppend('{{ $token }}')">{{ $token }}</button>
                                                         @endif
                                                     </div>
                                                 @endforeach
                                             @endforeach
                                             <div class="col-6">
-                                                <button type="button" class="btn btn-outline-secondary btn-sm w-100" wire:click="backspaceCalculator">⌫</button>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="purchaseCalcBackspace()">⌫</button>
                                             </div>
                                             <div class="col-6">
                                                 <button type="button" class="btn btn-warning btn-sm w-100" wire:click="applyCalculatorResult">Usar resultado</button>
@@ -254,6 +256,35 @@
             });
 
             input.value = value;
+        }
+
+        function purchaseCalcSyncHidden(value) {
+            const hidden = document.getElementById('calculatorExpressionHidden');
+            const display = document.getElementById('calculatorExpressionDisplay');
+
+            if (!hidden || !display) return;
+
+            hidden.value = value;
+            hidden.dispatchEvent(new Event('input', { bubbles: true }));
+            display.value = value;
+        }
+
+        function purchaseCalcAppend(token) {
+            const hidden = document.getElementById('calculatorExpressionHidden');
+            if (!hidden) return;
+
+            purchaseCalcSyncHidden((hidden.value || '') + token);
+        }
+
+        function purchaseCalcClear() {
+            purchaseCalcSyncHidden('');
+        }
+
+        function purchaseCalcBackspace() {
+            const hidden = document.getElementById('calculatorExpressionHidden');
+            if (!hidden) return;
+
+            purchaseCalcSyncHidden((hidden.value || '').slice(0, -1));
         }
     </script>
 @endonce
