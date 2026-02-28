@@ -121,7 +121,13 @@ class PeriodSummary extends Component
                 'hide_from_home_chart' => (bool) $category->hide_from_home_chart,
             ];
         })->filter(fn (array $row) => $row['spent'] > 0 || $row['budget'] !== null)
-            ->sortByDesc('spent')
+            ->sort(function (array $a, array $b) {
+                if ($a['hide_from_home_chart'] !== $b['hide_from_home_chart']) {
+                    return $a['hide_from_home_chart'] <=> $b['hide_from_home_chart'];
+                }
+
+                return $b['spent'] <=> $a['spent'];
+            })
             ->values();
 
         $chartRows = $rows->filter(fn (array $row) => ! $row['hide_from_home_chart'])->values();
