@@ -82,6 +82,11 @@ class BudgetPeriod
         ];
     }
 
+    public static function currentPeriodMonth(Household $household, ?Carbon $referenceDate = null): string
+    {
+        return self::forHousehold($household, $referenceDate)['period_month'];
+    }
+
     public static function fifthBusinessDay(int $year, int $month): Carbon
     {
         $date = Carbon::create($year, $month, 1)->startOfDay();
