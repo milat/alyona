@@ -55,7 +55,7 @@ class Index extends Component
         if ($user && $user->household_id !== null) {
             $household = $user->household;
             $monthOptions = $this->buildMonthOptions($household);
-            $currentMonth = now()->format('Y-m');
+            $currentMonth = BudgetPeriod::currentPeriodMonth($household);
             $hasCurrentMonth = $monthOptions->contains(fn (array $item) => $item['value'] === $currentMonth);
 
             if ($monthOptions->isNotEmpty()) {
@@ -130,9 +130,10 @@ class Index extends Component
 
     private function buildMonthOptions($household): Collection
     {
-        $windowStart = now()->copy()->subMonthsNoOverflow(12)->format('Y-m');
-        $windowEnd = now()->copy()->addMonthsNoOverflow(3)->format('Y-m');
-        $currentMonth = now()->format('Y-m');
+        $currentMonth = BudgetPeriod::currentPeriodMonth($household);
+        $currentMonthDate = Carbon::createFromFormat('Y-m', $currentMonth);
+        $windowStart = $currentMonthDate->copy()->subMonthsNoOverflow(12)->format('Y-m');
+        $windowEnd = $currentMonthDate->copy()->addMonthsNoOverflow(3)->format('Y-m');
 
         $periodMonths = Purchase::query()
             ->where('household_id', $household->id)
