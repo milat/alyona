@@ -322,6 +322,10 @@ class CreateModal extends Component
         $baseDate = Carbon::parse($basePurchasedAt)->startOfDay();
         $periodType = $household->budget_period_type ?? BudgetPeriod::CALENDAR_MONTH;
 
+        if ($installmentNumber === 1) {
+            return $baseDate->toDateString();
+        }
+
         if ($periodType !== BudgetPeriod::FIFTH_BUSINESS_DAY) {
             return $baseDate->copy()->addMonthsNoOverflow($installmentNumber - 1)->toDateString();
         }
