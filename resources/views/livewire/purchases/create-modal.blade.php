@@ -128,7 +128,7 @@
                                     <label class="form-label" for="installments">Parcelas</label>
                                     <select id="installments" class="form-select" wire:model.defer="installments">
                                         <option value="">Sem parcelamento</option>
-                                        @for ($i = 1; $i <= 99; $i++)
+                                        @for ($i = 2; $i <= 99; $i++)
                                             <option value="{{ $i }}">{{ $i }}</option>
                                         @endfor
                                     </select>
