@@ -169,7 +169,7 @@
                                         <input
                                             id="calculatorExpressionDisplay"
                                             type="text"
-                                            class="form-control form-control-sm mb-2 text-end"
+                                            class="form-control mb-2 text-end fs-5"
                                             placeholder="0"
                                             readonly
                                         >
@@ -178,18 +178,18 @@
                                                 @foreach ($line as $token)
                                                     <div class="col-3">
                                                         @if ($token === 'C')
-                                                            <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="purchaseCalcClear()">{{ $token }}</button>
+                                                            <button type="button" class="btn btn-outline-danger w-100 py-2 fs-5" onclick="purchaseCalcClear()">{{ $token }}</button>
                                                         @else
-                                                            <button type="button" class="btn btn-outline-dark btn-sm w-100" onclick="purchaseCalcAppend('{{ $token }}')">{{ $token }}</button>
+                                                            <button type="button" class="btn btn-outline-dark w-100 py-2 fs-5" onclick="purchaseCalcAppend('{{ $token }}')">{{ $token }}</button>
                                                         @endif
                                                     </div>
                                                 @endforeach
                                             @endforeach
                                             <div class="col-6">
-                                                <button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="purchaseCalcBackspace()">⌫</button>
+                                                <button type="button" class="btn btn-outline-secondary w-100 py-2 fs-5" onclick="purchaseCalcBackspace()">⌫</button>
                                             </div>
                                             <div class="col-6">
-                                                <button type="button" class="btn btn-warning btn-sm w-100" wire:click="applyCalculatorResult">Usar resultado</button>
+                                                <button type="button" class="btn btn-warning w-100 py-2 fs-6" wire:click="applyCalculatorResult">Usar resultado</button>
                                             </div>
                                         </div>
                                     </div>
