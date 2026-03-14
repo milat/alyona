@@ -34,7 +34,7 @@ class PeriodSummary extends Component
         if (! $user || $user->household_id === null || ! $user->household) {
             return view('livewire.dashboard.period-summary', [
                 'rows' => collect(),
-                'chart' => ['labels' => [], 'spent' => [], 'budget' => [], 'spentColors' => []],
+                'chart' => ['labels' => [], 'spent' => [], 'budget' => [], 'spentColors' => [], 'categoryColors' => [], 'pieLabels' => [], 'pieSpent' => [], 'pieCategoryColors' => []],
                 'monthOptions' => collect(),
                 'periodLabel' => '',
                 'periodRangeLabel' => '',
@@ -131,7 +131,6 @@ class PeriodSummary extends Component
             ->values();
 
         $chartRows = $rows->filter(fn (array $row) => ! $row['hide_from_home_chart'])->values();
-
         $periodMonth = Carbon::createFromFormat('Y-m', $period['period_month']);
 
         $chart = [
@@ -139,6 +138,10 @@ class PeriodSummary extends Component
             'spent' => $chartRows->pluck('spent')->map(fn ($value) => round((float) $value, 2))->values(),
             'budget' => $chartRows->pluck('budget')->map(fn ($value) => round((float) ($value ?? 0), 2))->values(),
             'spentColors' => $chartRows->pluck('spent_color')->values(),
+            'categoryColors' => $chartRows->pluck('color')->values(),
+            'pieLabels' => $rows->pluck('name')->values(),
+            'pieSpent' => $rows->pluck('spent')->map(fn ($value) => round((float) $value, 2))->values(),
+            'pieCategoryColors' => $rows->pluck('color')->values(),
         ];
 
         return view('livewire.dashboard.period-summary', [

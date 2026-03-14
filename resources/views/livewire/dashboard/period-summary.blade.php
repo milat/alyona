@@ -37,7 +37,11 @@
                          data-labels='@json($chart['labels'])'
                          data-spent='@json($chart['spent'])'
                          data-budget='@json($chart['budget'])'
-                         data-spent-colors='@json($chart['spentColors'])'>
+                         data-spent-colors='@json($chart['spentColors'])'
+                         data-category-colors='@json($chart['categoryColors'])'
+                         data-pie-labels='@json($chart['pieLabels'])'
+                         data-pie-spent='@json($chart['pieSpent'])'
+                         data-pie-category-colors='@json($chart['pieCategoryColors'])'>
                     </div>
                     <div style="height: 280px;">
                         <canvas id="dashboardPeriodChart"></canvas>
@@ -83,6 +87,11 @@
                         </table>
                     </div>
                 </div>
+                <div class="col-12">
+                    <div style="height: 320px;">
+                        <canvas id="dashboardPeriodPieChart"></canvas>
+                    </div>
+                </div>
             </div>
         @endif
     </div>
@@ -93,8 +102,9 @@
         window.renderDashboardPeriodChart = function () {
             const dataEl = document.getElementById('dashboard-chart-data');
             const canvas = document.getElementById('dashboardPeriodChart');
+            const pieCanvas = document.getElementById('dashboardPeriodPieChart');
 
-            if (!dataEl || !canvas || typeof Chart === 'undefined') {
+            if (!dataEl || !canvas || !pieCanvas || typeof Chart === 'undefined') {
                 return;
             }
 
@@ -102,13 +112,22 @@
             const spent = JSON.parse(dataEl.dataset.spent || '[]');
             const budget = JSON.parse(dataEl.dataset.budget || '[]');
             const spentColors = JSON.parse(dataEl.dataset.spentColors || '[]');
+            const categoryColors = JSON.parse(dataEl.dataset.categoryColors || '[]');
+            const pieLabels = JSON.parse(dataEl.dataset.pieLabels || '[]');
+            const pieSpent = JSON.parse(dataEl.dataset.pieSpent || '[]');
+            const pieCategoryColors = JSON.parse(dataEl.dataset.pieCategoryColors || '[]');
 
             if (window.dashboardPeriodChartInstance) {
                 window.dashboardPeriodChartInstance.destroy();
             }
 
+            if (window.dashboardPeriodPieChartInstance) {
+                window.dashboardPeriodPieChartInstance.destroy();
+            }
+
             if (!labels.length) {
                 window.dashboardPeriodChartInstance = null;
+                window.dashboardPeriodPieChartInstance = null;
                 return;
             }
 
@@ -144,6 +163,48 @@
                     }
                 }
             });
+
+            if (pieLabels.length) {
+                const totalSpent = pieSpent.reduce((sum, value) => sum + Number(value || 0), 0);
+
+                window.dashboardPeriodPieChartInstance = new Chart(pieCanvas.getContext('2d'), {
+                    type: 'pie',
+                    data: {
+                        labels: pieLabels,
+                        datasets: [
+                            {
+                                data: pieSpent,
+                                backgroundColor: pieCategoryColors.length ? pieCategoryColors : categoryColors,
+                                borderColor: '#dee2e6',
+                                borderWidth: 2,
+                                hoverBorderColor: '#ced4da',
+                                hoverBorderWidth: 3,
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function (context) {
+                                        const value = Number(context.raw || 0);
+                                        const percent = totalSpent > 0 ? ((value / totalSpent) * 100).toFixed(1) : '0.0';
+
+                                        return `${context.label}: ${percent}% (R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            } else {
+                window.dashboardPeriodPieChartInstance = null;
+            }
         };
 
         document.addEventListener('livewire:navigated', window.renderDashboardPeriodChart);
