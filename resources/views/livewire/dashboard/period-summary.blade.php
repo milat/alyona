@@ -187,7 +187,31 @@
                         maintainAspectRatio: false,
                         plugins: {
                             legend: {
-                                position: 'bottom'
+                                position: 'bottom',
+                                labels: {
+                                    generateLabels: function (chart) {
+                                        const dataset = chart.data.datasets[0];
+                                        const values = dataset?.data || [];
+                                        const total = values.reduce((sum, value) => sum + Number(value || 0), 0);
+
+                                        return chart.data.labels.map((label, index) => {
+                                            const value = Number(values[index] || 0);
+                                            const percent = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+                                            const style = Array.isArray(dataset.backgroundColor)
+                                                ? dataset.backgroundColor[index]
+                                                : dataset.backgroundColor;
+
+                                            return {
+                                                text: `${label} (${percent}%)`,
+                                                fillStyle: style,
+                                                strokeStyle: '#dee2e6',
+                                                lineWidth: 2,
+                                                hidden: !chart.getDataVisibility(index),
+                                                index: index,
+                                            };
+                                        });
+                                    }
+                                }
                             },
                             tooltip: {
                                 callbacks: {
