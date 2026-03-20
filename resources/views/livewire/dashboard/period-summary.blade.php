@@ -88,97 +88,75 @@
                     </div>
                 </div>
                 <div class="col-12">
-                    <div style="height: 320px;">
+                    <div class="dashboard-pie-chart-wrapper">
                         <canvas id="dashboardPeriodPieChart"></canvas>
                     </div>
                 </div>
             </div>
         @endif
     </div>
-</div>
-
-@once
-    <script>
-        window.renderDashboardPeriodChart = function () {
-            const dataEl = document.getElementById('dashboard-chart-data');
-            const canvas = document.getElementById('dashboardPeriodChart');
-            const pieCanvas = document.getElementById('dashboardPeriodPieChart');
-
-            if (!dataEl || !canvas || !pieCanvas || typeof Chart === 'undefined') {
-                return;
+    @once
+        <style>
+            .dashboard-pie-chart-wrapper {
+                position: relative;
+                height: 320px;
+                width: 100%;
             }
 
-            const labels = JSON.parse(dataEl.dataset.labels || '[]');
-            const spent = JSON.parse(dataEl.dataset.spent || '[]');
-            const budget = JSON.parse(dataEl.dataset.budget || '[]');
-            const spentColors = JSON.parse(dataEl.dataset.spentColors || '[]');
-            const categoryColors = JSON.parse(dataEl.dataset.categoryColors || '[]');
-            const pieLabels = JSON.parse(dataEl.dataset.pieLabels || '[]');
-            const pieSpent = JSON.parse(dataEl.dataset.pieSpent || '[]');
-            const pieCategoryColors = JSON.parse(dataEl.dataset.pieCategoryColors || '[]');
-
-            if (window.dashboardPeriodChartInstance) {
-                window.dashboardPeriodChartInstance.destroy();
-            }
-
-            if (window.dashboardPeriodPieChartInstance) {
-                window.dashboardPeriodPieChartInstance.destroy();
-            }
-
-            if (!labels.length) {
-                window.dashboardPeriodChartInstance = null;
-                window.dashboardPeriodPieChartInstance = null;
-                return;
-            }
-
-            window.dashboardPeriodChartInstance = new Chart(canvas.getContext('2d'), {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Gasto',
-                            data: spent,
-                            backgroundColor: spentColors,
-                        },
-                        {
-                            label: 'Orcamento',
-                            data: budget,
-                            backgroundColor: '#adb5bd',
-                        }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            display: false
-                        }
-                    },
-                    scales: {
-                        y: {
-                            beginAtZero: true
-                        }
-                    }
+            @media (max-width: 767.98px) {
+                .dashboard-pie-chart-wrapper {
+                    height: 420px;
                 }
-            });
+            }
+        </style>
 
-            if (pieLabels.length) {
-                const totalSpent = pieSpent.reduce((sum, value) => sum + Number(value || 0), 0);
+        <script>
+            window.renderDashboardPeriodChart = function () {
+                const dataEl = document.getElementById('dashboard-chart-data');
+                const canvas = document.getElementById('dashboardPeriodChart');
+                const pieCanvas = document.getElementById('dashboardPeriodPieChart');
 
-                window.dashboardPeriodPieChartInstance = new Chart(pieCanvas.getContext('2d'), {
-                    type: 'pie',
+                if (!dataEl || !canvas || !pieCanvas || typeof Chart === 'undefined') {
+                    return;
+                }
+
+                const labels = JSON.parse(dataEl.dataset.labels || '[]');
+                const spent = JSON.parse(dataEl.dataset.spent || '[]');
+                const budget = JSON.parse(dataEl.dataset.budget || '[]');
+                const spentColors = JSON.parse(dataEl.dataset.spentColors || '[]');
+                const categoryColors = JSON.parse(dataEl.dataset.categoryColors || '[]');
+                const pieLabels = JSON.parse(dataEl.dataset.pieLabels || '[]');
+                const pieSpent = JSON.parse(dataEl.dataset.pieSpent || '[]');
+                const pieCategoryColors = JSON.parse(dataEl.dataset.pieCategoryColors || '[]');
+
+                if (window.dashboardPeriodChartInstance) {
+                    window.dashboardPeriodChartInstance.destroy();
+                }
+
+                if (window.dashboardPeriodPieChartInstance) {
+                    window.dashboardPeriodPieChartInstance.destroy();
+                }
+
+                if (!labels.length) {
+                    window.dashboardPeriodChartInstance = null;
+                    window.dashboardPeriodPieChartInstance = null;
+                    return;
+                }
+
+                window.dashboardPeriodChartInstance = new Chart(canvas.getContext('2d'), {
+                    type: 'bar',
                     data: {
-                        labels: pieLabels,
+                        labels: labels,
                         datasets: [
                             {
-                                data: pieSpent,
-                                backgroundColor: pieCategoryColors.length ? pieCategoryColors : categoryColors,
-                                borderColor: '#dee2e6',
-                                borderWidth: 2,
-                                hoverBorderColor: '#ced4da',
-                                hoverBorderWidth: 3,
+                                label: 'Gasto',
+                                data: spent,
+                                backgroundColor: spentColors,
+                            },
+                            {
+                                label: 'Orcamento',
+                                data: budget,
+                                backgroundColor: '#adb5bd',
                             }
                         ]
                     },
@@ -187,66 +165,101 @@
                         maintainAspectRatio: false,
                         plugins: {
                             legend: {
-                                position: 'bottom',
-                                labels: {
-                                    generateLabels: function (chart) {
-                                        const dataset = chart.data.datasets[0];
-                                        const values = dataset?.data || [];
-                                        const total = values.reduce((sum, value) => sum + Number(value || 0), 0);
-
-                                        return chart.data.labels.map((label, index) => {
-                                            const value = Number(values[index] || 0);
-                                            const percent = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
-                                            const style = Array.isArray(dataset.backgroundColor)
-                                                ? dataset.backgroundColor[index]
-                                                : dataset.backgroundColor;
-
-                                            return {
-                                                text: `${label} (${percent}%)`,
-                                                fillStyle: style,
-                                                strokeStyle: '#dee2e6',
-                                                lineWidth: 2,
-                                                hidden: !chart.getDataVisibility(index),
-                                                index: index,
-                                            };
-                                        });
-                                    }
-                                }
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: function (context) {
-                                        const value = Number(context.raw || 0);
-                                        const percent = totalSpent > 0 ? ((value / totalSpent) * 100).toFixed(1) : '0.0';
-
-                                        return `${context.label}: ${percent}% (R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
-                                    }
-                                }
+                                display: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true
                             }
                         }
                     }
                 });
-            } else {
-                window.dashboardPeriodPieChartInstance = null;
-            }
-        };
 
-        document.addEventListener('livewire:navigated', window.renderDashboardPeriodChart);
-        document.addEventListener('DOMContentLoaded', window.renderDashboardPeriodChart);
-        document.addEventListener('livewire:init', () => {
-            Livewire.hook('morph.updated', ({ el }) => {
-                if (el && (el.id === 'dashboard-chart-data' || el.querySelector?.('#dashboard-chart-data'))) {
+                if (pieLabels.length) {
+                    const totalSpent = pieSpent.reduce((sum, value) => sum + Number(value || 0), 0);
+
+                    window.dashboardPeriodPieChartInstance = new Chart(pieCanvas.getContext('2d'), {
+                        type: 'pie',
+                        data: {
+                            labels: pieLabels,
+                            datasets: [
+                                {
+                                    data: pieSpent,
+                                    backgroundColor: pieCategoryColors.length ? pieCategoryColors : categoryColors,
+                                    borderColor: '#dee2e6',
+                                    borderWidth: 2,
+                                    hoverBorderColor: '#ced4da',
+                                    hoverBorderWidth: 3,
+                                }
+                            ]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom',
+                                    labels: {
+                                        generateLabels: function (chart) {
+                                            const dataset = chart.data.datasets[0];
+                                            const values = dataset?.data || [];
+                                            const total = values.reduce((sum, value) => sum + Number(value || 0), 0);
+
+                                            return chart.data.labels.map((label, index) => {
+                                                const value = Number(values[index] || 0);
+                                                const percent = total > 0 ? ((value / total) * 100).toFixed(1) : '0.0';
+                                                const style = Array.isArray(dataset.backgroundColor)
+                                                    ? dataset.backgroundColor[index]
+                                                    : dataset.backgroundColor;
+
+                                                return {
+                                                    text: `${label} (${percent}%)`,
+                                                    fillStyle: style,
+                                                    strokeStyle: '#dee2e6',
+                                                    lineWidth: 2,
+                                                    hidden: !chart.getDataVisibility(index),
+                                                    index: index,
+                                                };
+                                            });
+                                        }
+                                    }
+                                },
+                                tooltip: {
+                                    callbacks: {
+                                        label: function (context) {
+                                            const value = Number(context.raw || 0);
+                                            const percent = totalSpent > 0 ? ((value / totalSpent) * 100).toFixed(1) : '0.0';
+
+                                            return `${context.label}: ${percent}% (R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    });
+                } else {
+                    window.dashboardPeriodPieChartInstance = null;
+                }
+            };
+
+            document.addEventListener('livewire:navigated', window.renderDashboardPeriodChart);
+            document.addEventListener('DOMContentLoaded', window.renderDashboardPeriodChart);
+            document.addEventListener('livewire:init', () => {
+                Livewire.hook('morph.updated', ({ el }) => {
+                    if (el && (el.id === 'dashboard-chart-data' || el.querySelector?.('#dashboard-chart-data'))) {
+                        requestAnimationFrame(() => {
+                            window.renderDashboardPeriodChart();
+                        });
+                    }
+                });
+
+                Livewire.on('dashboard-period-changed', () => {
                     requestAnimationFrame(() => {
                         window.renderDashboardPeriodChart();
                     });
-                }
-            });
-
-            Livewire.on('dashboard-period-changed', () => {
-                requestAnimationFrame(() => {
-                    window.renderDashboardPeriodChart();
                 });
             });
-        });
-    </script>
-@endonce
+        </script>
+    @endonce
+</div>
