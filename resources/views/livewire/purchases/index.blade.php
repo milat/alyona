@@ -116,7 +116,7 @@
                 @endif
             @endforeach
             <div class="mt-3">
-                {{ $purchases->links('vendor.pagination.bootstrap-5-pt') }}
+                {{ $purchases->onEachSide(1)->links('vendor.pagination.bootstrap-5-pt') }}
             </div>
         @endif
     @endif
