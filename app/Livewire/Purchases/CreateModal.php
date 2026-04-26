@@ -8,6 +8,7 @@ use App\Models\PaymentMethod;
 use App\Models\Purchase;
 use App\Support\BudgetPeriod;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 
 class CreateModal extends Component
@@ -30,7 +31,6 @@ class CreateModal extends Component
 
     public function openConfirm(): void
     {
-        $this->autoAssignCategoryFromDescription();
         $this->amount = $this->normalizeCurrencyValue($this->amount);
 
         $this->validate([
@@ -90,52 +90,8 @@ class CreateModal extends Component
         $this->calculatorExpression = '';
     }
 
-    public function updatedDescription(?string $value): void
-    {
-        $description = $this->normalizeDescriptionMatch($value);
-
-        if ($description === '') {
-            return;
-        }
-
-        $this->assignCategoryByNormalizedText($description);
-    }
-
-    public function autoAssignCategoryFromTitle(): void
-    {
-        $title = $this->normalizeDescriptionMatch($this->title);
-
-        if ($title === '') {
-            return;
-        }
-
-        $this->assignCategoryByNormalizedText($title);
-    }
-
-    private function assignCategoryByNormalizedText(string $normalizedText): void
-    {
-        $user = auth()->user();
-
-        if (! $user || $user->household_id === null) {
-            return;
-        }
-
-        $matchedCategory = Category::query()
-            ->where('household_id', $user->household_id)
-            ->where('is_active', true)
-            ->get(['id', 'default_purchase_description'])
-            ->first(function (Category $category) use ($normalizedText) {
-                return $this->normalizeDescriptionMatch($category->default_purchase_description) === $normalizedText;
-            });
-
-        if ($matchedCategory) {
-            $this->category_id = $matchedCategory->id;
-        }
-    }
-
     public function save(): void
     {
-        $this->autoAssignCategoryFromDescription();
         $this->amount = $this->normalizeCurrencyValue($this->amount);
 
         $data = $this->validate([
@@ -305,18 +261,6 @@ class CreateModal extends Component
         return true;
     }
 
-    private function normalizeDescriptionMatch(?string $value): string
-    {
-        $normalized = preg_replace('/\\s+/u', ' ', trim((string) ($value ?? '')));
-
-        return mb_strtolower($normalized);
-    }
-
-    private function autoAssignCategoryFromDescription(): void
-    {
-        $this->updatedDescription($this->description);
-    }
-
     private function resolveInstallmentDate($household, string $basePurchasedAt, int $installmentNumber): string
     {
         $baseDate = Carbon::parse($basePurchasedAt)->startOfDay();
@@ -363,11 +307,23 @@ class CreateModal extends Component
 
         if ($user && $user->household_id !== null && $user->household) {
             $household = $user->household;
+            $recentUsageStart = now()->copy()->subDays(90)->toDateString();
+
+            $recentUsageSubquery = Purchase::query()
+                ->selectRaw('category_id, COUNT(*) as recent_usage_count')
+                ->where('household_id', $user->household_id)
+                ->whereDate('purchased_at', '>=', $recentUsageStart)
+                ->groupBy('category_id');
 
             $categories = Category::query()
+                ->leftJoinSub($recentUsageSubquery, 'recent_purchase_usage', function ($join) {
+                    $join->on('categories.id', '=', 'recent_purchase_usage.category_id');
+                })
                 ->where('household_id', $user->household_id)
                 ->where('is_active', true)
+                ->orderByRaw('COALESCE(recent_purchase_usage.recent_usage_count, 0) DESC')
                 ->orderBy('description')
+                ->select('categories.*')
                 ->get();
 
             $categoryIds = $categories->pluck('id');

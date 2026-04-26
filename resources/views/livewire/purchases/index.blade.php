@@ -35,6 +35,9 @@
         @if ($purchases->isEmpty())
             <div class="alert alert-info">Nenhuma compra cadastrada ainda.</div>
         @else
+            <div class="mb-3 text-end">
+                <strong>Total:</strong> R$ {{ number_format($filteredTotal, 2, ',', '.') }}
+            </div>
             <div class="table-responsive">
                 <table class="table table-striped align-middle">
                     <thead>

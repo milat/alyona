@@ -15,6 +15,11 @@
                             <i class="bi bi-cart me-1"></i>Compras
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" aria-current="page" href="{{ route('evolution.index') }}" wire:navigate>
+                            <i class="bi bi-graph-up-arrow me-1"></i>Evolução
+                        </a>
+                    </li>
 {{--                    <li class="nav-item">--}}
 {{--                        <a class="nav-link active" aria-current="page" href="{{ route('incomes.index') }}" wire:navigate>--}}
 {{--                            <i class="bi bi-cash-coin me-1"></i>Entradas--}}

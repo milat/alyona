@@ -7,6 +7,7 @@ use App\Models\Purchase;
 use App\Support\BudgetPeriod;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
 use Livewire\Component;
 use Livewire\WithPagination;
@@ -20,6 +21,12 @@ class Index extends Component
 
     #[Url(as: 'categoria', except: null)]
     public ?string $selectedCategoryId = null;
+
+    #[On('purchase-saved')]
+    public function refreshPurchases(): void
+    {
+        // Livewire re-renders the component after handling the event.
+    }
 
     public function delete(int $purchaseId): void
     {
@@ -51,6 +58,7 @@ class Index extends Component
         $purchases = collect();
         $monthOptions = collect();
         $categoryOptions = collect();
+        $filteredTotal = 0;
 
         if ($user && $user->household_id !== null) {
             $household = $user->household;
@@ -118,6 +126,7 @@ class Index extends Component
                 $query->where('category_id', (int) $this->selectedCategoryId);
             }
 
+            $filteredTotal = (float) (clone $query)->sum('amount');
             $purchases = $query->paginate(10)->withQueryString();
         }
 
@@ -125,6 +134,7 @@ class Index extends Component
             'purchases' => $purchases,
             'monthOptions' => $monthOptions,
             'categoryOptions' => $categoryOptions,
+            'filteredTotal' => $filteredTotal,
         ]);
     }
 

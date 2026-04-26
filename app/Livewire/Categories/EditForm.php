@@ -4,7 +4,6 @@ namespace App\Livewire\Categories;
 
 use App\Models\Category;
 use App\Models\CategoryBudget;
-use Illuminate\Validation\Rule;
 use Livewire\Component;
 
 class EditForm extends Component
@@ -16,7 +15,6 @@ class EditForm extends Component
     public ?string $currentBudgetAmount = null;
     public bool $is_active = true;
     public bool $hide_from_home_chart = false;
-    public ?string $default_purchase_description = null;
 
     public function mount(int $categoryId): void
     {
@@ -27,7 +25,6 @@ class EditForm extends Component
         $this->color = $category->color;
         $this->is_active = (bool) $category->is_active;
         $this->hide_from_home_chart = (bool) $category->hide_from_home_chart;
-        $this->default_purchase_description = $category->default_purchase_description;
 
         $currentBudget = $category->budgets()
             ->orderByDesc('effective_at')
@@ -49,14 +46,6 @@ class EditForm extends Component
             'budget_amount' => ['nullable', 'numeric', 'min:0'],
             'is_active' => ['required', 'boolean'],
             'hide_from_home_chart' => ['required', 'boolean'],
-            'default_purchase_description' => [
-                'nullable',
-                'string',
-                'max:255',
-                Rule::unique('categories', 'default_purchase_description')
-                    ->ignore($this->categoryId)
-                    ->where(fn ($query) => $query->where('household_id', $user?->household_id)),
-            ],
         ]);
 
         $category = $this->getCategory($this->categoryId);
@@ -66,7 +55,6 @@ class EditForm extends Component
             'color' => $data['color'],
             'is_active' => $data['is_active'],
             'hide_from_home_chart' => $data['hide_from_home_chart'],
-            'default_purchase_description' => $data['default_purchase_description'] ?: null,
         ]);
 
         $newAmount = $data['budget_amount'] !== null && $data['budget_amount'] !== ''
