@@ -15,8 +15,12 @@ class Index extends Component
     #[Url(as: 'categoria', except: null)]
     public ?string $selectedCategoryId = null;
 
-    public function updatedSelectedCategoryId(): void
+    public function updatedSelectedCategoryId(?string $value): void
     {
+        if ($value === '') {
+            $this->selectedCategoryId = null;
+        }
+
         $this->dispatch('evolution-category-changed');
     }
 
@@ -41,27 +45,38 @@ class Index extends Component
             $this->selectedCategoryId = null;
         }
 
+        $selectedCategoryId = $this->selectedCategoryId;
+
+        $purchaseQuery = Purchase::query()
+            ->where('household_id', $household->id)
+            ->orderByDesc('purchased_at');
+
+        if ($selectedCategoryId !== null) {
+            $purchaseQuery->where('category_id', (int) $selectedCategoryId);
+        }
+
+        $totalsByPeriod = $purchaseQuery
+            ->get(['amount', 'purchased_at'])
+            ->groupBy(fn (Purchase $purchase) => BudgetPeriod::forHousehold($household, $purchase->purchased_at)['period_month'])
+            ->map(fn (Collection $purchases) => round((float) $purchases->sum('amount'), 2));
+
         $currentPeriodMonth = BudgetPeriod::currentPeriodMonth($household);
         $periodMonths = collect(range(0, 5))
-            ->map(fn (int $offset) => Carbon::createFromFormat('Y-m', $currentPeriodMonth)->subMonthsNoOverflow(5 - $offset))
+            ->map(fn (int $offset) => Carbon::createFromFormat('Y-m', $currentPeriodMonth)->subMonthsNoOverflow(5 - $offset)->format('Y-m'))
             ->values();
 
-        $chartRows = $periodMonths->map(function (Carbon $periodMonth) use ($household) {
-            $period = BudgetPeriod::forYearMonth($household, (int) $periodMonth->format('Y'), (int) $periodMonth->format('m'));
+        $firstPeriodWithExpenseIndex = $periodMonths->search(fn (string $periodMonth) => (float) ($totalsByPeriod[$periodMonth] ?? 0) > 0);
 
-            $query = Purchase::query()
-                ->where('household_id', $household->id)
-                ->whereBetween('purchased_at', [$period['start']->toDateString(), $period['end']->toDateString()]);
-
-            if ($this->selectedCategoryId !== null) {
-                $query->where('category_id', (int) $this->selectedCategoryId);
-            }
-
-            return [
-                'label' => $this->formatMonthLabel($periodMonth),
-                'total' => round((float) $query->sum('amount'), 2),
-            ];
-        });
+        $chartRows = $firstPeriodWithExpenseIndex === false
+            ? collect()
+            : $periodMonths
+                ->slice($firstPeriodWithExpenseIndex)
+                ->map(fn (string $periodMonth) => [
+                    'period_month' => $periodMonth,
+                    'label' => $this->formatMonthLabel(Carbon::createFromFormat('Y-m', $periodMonth)),
+                    'total' => (float) ($totalsByPeriod[$periodMonth] ?? 0),
+                ])
+            ->values();
 
         return view('livewire.evolution.index', [
             'categoryOptions' => $categoryOptions,
