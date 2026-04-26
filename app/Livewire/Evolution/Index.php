@@ -21,7 +21,13 @@ class Index extends Component
             $this->selectedCategoryId = null;
         }
 
-        $this->dispatch('evolution-category-changed');
+        $user = auth()->user();
+
+        if (! $user || $user->household_id === null || ! $user->household) {
+            return;
+        }
+
+        $this->dispatch('evolution-chart-updated', chart: $this->buildChartData($user->household, $this->selectedCategoryId));
     }
 
     public function render()
@@ -45,8 +51,14 @@ class Index extends Component
             $this->selectedCategoryId = null;
         }
 
-        $selectedCategoryId = $this->selectedCategoryId;
+        return view('livewire.evolution.index', [
+            'categoryOptions' => $categoryOptions,
+            'chart' => $this->buildChartData($household, $this->selectedCategoryId),
+        ]);
+    }
 
+    private function buildChartData($household, ?string $selectedCategoryId): array
+    {
         $purchaseQuery = Purchase::query()
             ->where('household_id', $household->id)
             ->orderByDesc('purchased_at');
@@ -72,19 +84,15 @@ class Index extends Component
             : $periodMonths
                 ->slice($firstPeriodWithExpenseIndex)
                 ->map(fn (string $periodMonth) => [
-                    'period_month' => $periodMonth,
                     'label' => $this->formatMonthLabel(Carbon::createFromFormat('Y-m', $periodMonth)),
                     'total' => (float) ($totalsByPeriod[$periodMonth] ?? 0),
                 ])
-            ->values();
+                ->values();
 
-        return view('livewire.evolution.index', [
-            'categoryOptions' => $categoryOptions,
-            'chart' => [
-                'labels' => $chartRows->pluck('label')->values(),
-                'values' => $chartRows->pluck('total')->values(),
-            ],
-        ]);
+        return [
+            'labels' => $chartRows->pluck('label')->values(),
+            'values' => $chartRows->pluck('total')->values(),
+        ];
     }
 
     private function buildCategoryOptions(int $householdId): Collection
