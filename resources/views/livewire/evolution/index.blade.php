@@ -23,6 +23,7 @@
             <div class="card-body">
                 <div
                     id="evolution-chart-data"
+                    wire:key="evolution-chart-data-{{ $selectedCategoryId ?: 'all' }}-{{ md5(json_encode($chart['values'])) }}"
                     data-labels='@json($chart['labels'])'
                     data-values='@json($chart['values'])'
                 ></div>
@@ -103,7 +104,7 @@
             document.addEventListener('livewire:navigated', window.renderEvolutionLineChart);
             document.addEventListener('DOMContentLoaded', window.renderEvolutionLineChart);
             document.addEventListener('livewire:init', () => {
-                Livewire.hook('morph.updated', ({ el }) => {
+                Livewire.hook('morphed', ({ el }) => {
                     if (el && (el.id === 'evolution-chart-data' || el.querySelector?.('#evolution-chart-data'))) {
                         requestAnimationFrame(() => {
                             window.renderEvolutionLineChart();
@@ -112,9 +113,9 @@
                 });
 
                 Livewire.on('evolution-category-changed', () => {
-                    requestAnimationFrame(() => {
+                    setTimeout(() => {
                         window.renderEvolutionLineChart();
-                    });
+                    }, 50);
                 });
             });
         </script>
