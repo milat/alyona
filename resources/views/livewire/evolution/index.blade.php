@@ -26,7 +26,7 @@
                     data-labels='@json($chart['labels'])'
                     data-values='@json($chart['values'])'
                 ></div>
-                <div style="height: 340px;">
+                <div style="height: 340px;" wire:ignore>
                     <canvas id="evolutionLineChart"></canvas>
                 </div>
             </div>
@@ -109,6 +109,12 @@
                             window.renderEvolutionLineChart();
                         });
                     }
+                });
+
+                Livewire.on('evolution-category-changed', () => {
+                    requestAnimationFrame(() => {
+                        window.renderEvolutionLineChart();
+                    });
                 });
             });
         </script>
