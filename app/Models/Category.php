@@ -17,7 +17,6 @@ class Category extends Model
         'color',
         'is_active',
         'hide_from_home_chart',
-        'default_purchase_description',
     ];
 
     protected $casts = [

@@ -20,6 +20,7 @@ Route::middleware('auth')->group(function () {
         return view('categories.edit', compact('category'));
     })->name('categories.edit');
     Route::view('/purchases', 'purchases.index')->name('purchases.index');
+    Route::view('/evolution', 'evolutions.index')->name('evolution.index');
     // Edicao de compras removida por requisicao
     Route::view('/incomes', 'incomes.index')->name('incomes.index');
     Route::get('/incomes/{income}/edit', function (App\Models\Income $income) {

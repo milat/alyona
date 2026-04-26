@@ -4,7 +4,6 @@ namespace App\Livewire\Categories;
 
 use App\Models\Category;
 use App\Models\CategoryBudget;
-use Illuminate\Validation\Rule;
 use Livewire\Component;
 
 class CreateForm extends Component
@@ -14,7 +13,6 @@ class CreateForm extends Component
     public ?string $budget_amount = null;
     public bool $is_active = true;
     public bool $hide_from_home_chart = false;
-    public ?string $default_purchase_description = null;
 
     public function save(): void
     {
@@ -28,13 +26,6 @@ class CreateForm extends Component
             'budget_amount' => ['nullable', 'numeric', 'min:0'],
             'is_active' => ['required', 'boolean'],
             'hide_from_home_chart' => ['required', 'boolean'],
-            'default_purchase_description' => [
-                'nullable',
-                'string',
-                'max:255',
-                Rule::unique('categories', 'default_purchase_description')
-                    ->where(fn ($query) => $query->where('household_id', $user?->household_id)),
-            ],
         ]);
 
         if (! $user || $user->household_id === null) {
@@ -48,7 +39,6 @@ class CreateForm extends Component
             'color' => $data['color'],
             'is_active' => $data['is_active'],
             'hide_from_home_chart' => $data['hide_from_home_chart'],
-            'default_purchase_description' => $data['default_purchase_description'] ?: null,
         ]);
 
         if ($data['budget_amount'] !== null && $data['budget_amount'] !== '') {
