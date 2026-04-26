@@ -15,6 +15,11 @@ class Index extends Component
     #[Url(as: 'categoria', except: null)]
     public ?string $selectedCategoryId = null;
 
+    public function updatedSelectedCategoryId(): void
+    {
+        $this->dispatch('evolution-category-changed');
+    }
+
     public function render()
     {
         $user = auth()->user();
