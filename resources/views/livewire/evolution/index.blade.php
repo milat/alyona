@@ -21,116 +21,79 @@
 
         <div class="card shadow-sm">
             <div class="card-body">
-                <div
-                    id="evolution-chart-data"
-                    wire:key="evolution-chart-data-{{ $selectedCategoryId ?: 'all' }}-{{ md5(json_encode($chart['values'])) }}"
-                    data-labels='@json($chart['labels'])'
-                    data-values='@json($chart['values'])'
-                ></div>
-                <div id="evolutionLineChartWrapper" style="height: 340px;" wire:ignore>
-                    <canvas id="evolutionLineChart"></canvas>
-                </div>
+                @php
+                    $labels = collect($chart['labels']);
+                    $values = collect($chart['values'])->map(fn ($value) => (float) $value);
+                    $pointCount = $labels->count();
+                    $maxValue = max(1, (float) $values->max());
+                    $width = 720;
+                    $height = 340;
+                    $left = 72;
+                    $right = 24;
+                    $top = 24;
+                    $bottom = 58;
+                    $plotWidth = $width - $left - $right;
+                    $plotHeight = $height - $top - $bottom;
+                    $baselineY = $top + $plotHeight;
+
+                    $points = $values->values()->map(function (float $value, int $index) use ($pointCount, $left, $plotWidth, $top, $plotHeight, $maxValue) {
+                        $x = $pointCount > 1
+                            ? $left + (($plotWidth / ($pointCount - 1)) * $index)
+                            : $left + ($plotWidth / 2);
+                        $y = $top + ($plotHeight - (($value / $maxValue) * $plotHeight));
+
+                        return [
+                            'x' => round($x, 2),
+                            'y' => round($y, 2),
+                            'value' => $value,
+                        ];
+                    });
+
+                    $linePoints = $points->map(fn (array $point) => $point['x'] . ',' . $point['y'])->implode(' ');
+                    $areaPoints = $points->isNotEmpty()
+                        ? $left . ',' . $baselineY . ' ' . $linePoints . ' ' . ($left + $plotWidth) . ',' . $baselineY
+                        : '';
+                @endphp
+
+                @if ($pointCount === 0)
+                    <div class="alert alert-info mb-0">Nenhum gasto encontrado para o filtro selecionado.</div>
+                @else
+                    <div class="evolution-svg-chart overflow-x-auto">
+                        <svg viewBox="0 0 {{ $width }} {{ $height }}" role="img" aria-label="Evolução de gastos por período" class="w-100">
+                            @for ($i = 0; $i <= 4; $i++)
+                                @php
+                                    $ratio = $i / 4;
+                                    $gridY = $top + ($plotHeight * $ratio);
+                                    $gridValue = $maxValue - ($maxValue * $ratio);
+                                @endphp
+                                <line x1="{{ $left }}" y1="{{ $gridY }}" x2="{{ $left + $plotWidth }}" y2="{{ $gridY }}" stroke="#e9ecef" stroke-width="1" />
+                                <text x="{{ $left - 10 }}" y="{{ $gridY + 4 }}" text-anchor="end" font-size="11" fill="#6c757d">
+                                    R$ {{ number_format($gridValue, 0, ',', '.') }}
+                                </text>
+                            @endfor
+
+                            <line x1="{{ $left }}" y1="{{ $top }}" x2="{{ $left }}" y2="{{ $baselineY }}" stroke="#ced4da" stroke-width="1" />
+                            <line x1="{{ $left }}" y1="{{ $baselineY }}" x2="{{ $left + $plotWidth }}" y2="{{ $baselineY }}" stroke="#ced4da" stroke-width="1" />
+
+                            <polygon points="{{ $areaPoints }}" fill="rgba(13, 110, 253, 0.14)" />
+                            <polyline points="{{ $linePoints }}" fill="none" stroke="#0d6efd" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+
+                            @foreach ($points as $index => $point)
+                                <line x1="{{ $point['x'] }}" y1="{{ $baselineY }}" x2="{{ $point['x'] }}" y2="{{ $baselineY + 5 }}" stroke="#ced4da" stroke-width="1" />
+                                <text x="{{ $point['x'] }}" y="{{ $baselineY + 24 }}" text-anchor="middle" font-size="12" fill="#495057">
+                                    {{ $labels[$index] }}
+                                </text>
+                                <circle cx="{{ $point['x'] }}" cy="{{ $point['y'] }}" r="5" fill="#0d6efd" stroke="#ffffff" stroke-width="2">
+                                    <title>{{ $labels[$index] }}: R$ {{ number_format($point['value'], 2, ',', '.') }}</title>
+                                </circle>
+                                <text x="{{ $point['x'] }}" y="{{ max($top + 12, $point['y'] - 12) }}" text-anchor="middle" font-size="11" fill="#0d6efd">
+                                    R$ {{ number_format($point['value'], 2, ',', '.') }}
+                                </text>
+                            @endforeach
+                        </svg>
+                    </div>
+                @endif
             </div>
         </div>
     @endif
-
-    @once
-        <script>
-            window.renderEvolutionLineChart = function (chartData = null) {
-                const dataEl = document.getElementById('evolution-chart-data');
-                const wrapper = document.getElementById('evolutionLineChartWrapper');
-
-                if (!dataEl || !wrapper || typeof Chart === 'undefined') {
-                    return;
-                }
-
-                const labels = chartData?.labels || JSON.parse(dataEl.dataset.labels || '[]');
-                const values = chartData?.values || JSON.parse(dataEl.dataset.values || '[]');
-
-                if (window.evolutionLineChartInstance) {
-                    window.evolutionLineChartInstance.destroy();
-                }
-
-                wrapper.innerHTML = '<canvas id="evolutionLineChart"></canvas>';
-                const canvas = document.getElementById('evolutionLineChart');
-
-                window.evolutionLineChartInstance = new Chart(canvas.getContext('2d'), {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [
-                            {
-                                label: 'Gastos',
-                                data: values,
-                                borderColor: '#0d6efd',
-                                backgroundColor: 'rgba(13, 110, 253, 0.18)',
-                                pointBackgroundColor: '#0d6efd',
-                                pointBorderColor: '#0d6efd',
-                                pointRadius: 4,
-                                pointHoverRadius: 5,
-                                tension: 0.25,
-                                fill: true,
-                            }
-                        ]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                display: false
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: function (context) {
-                                        const value = Number(context.raw || 0);
-
-                                        return `Gastos: R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                                    }
-                                }
-                            }
-                        },
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                ticks: {
-                                    callback: function (value) {
-                                        return 'R$ ' + Number(value).toLocaleString('pt-BR');
-                                    }
-                                }
-                            }
-                        }
-                    }
-                });
-            };
-
-            window.scheduleEvolutionLineChartRender = function (chartData = null) {
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        window.renderEvolutionLineChart(chartData);
-                    });
-                });
-
-                setTimeout(() => {
-                    window.renderEvolutionLineChart(chartData);
-                }, 150);
-            };
-
-            document.addEventListener('livewire:navigated', window.renderEvolutionLineChart);
-            document.addEventListener('DOMContentLoaded', window.renderEvolutionLineChart);
-            document.addEventListener('livewire:init', () => {
-                Livewire.hook('morphed', ({ el }) => {
-                    if (el && (el.id === 'evolution-chart-data' || el.querySelector?.('#evolution-chart-data'))) {
-                        window.scheduleEvolutionLineChartRender();
-                    }
-                });
-
-                Livewire.on('evolution-chart-updated', (payload) => {
-                    const chartData = payload?.chart || payload?.[0]?.chart || payload;
-
-                    window.scheduleEvolutionLineChartRender(chartData);
-                });
-            });
-        </script>
-    @endonce
 </div>

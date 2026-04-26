@@ -20,14 +20,6 @@ class Index extends Component
         if ($value === '') {
             $this->selectedCategoryId = null;
         }
-
-        $user = auth()->user();
-
-        if (! $user || $user->household_id === null || ! $user->household) {
-            return;
-        }
-
-        $this->dispatch('evolution-chart-updated', chart: $this->buildChartData($user->household, $this->selectedCategoryId));
     }
 
     public function render()
