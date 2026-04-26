@@ -27,7 +27,7 @@
                     data-labels='@json($chart['labels'])'
                     data-values='@json($chart['values'])'
                 ></div>
-                <div style="height: 340px;" wire:ignore>
+                <div id="evolutionLineChartWrapper" style="height: 340px;" wire:ignore>
                     <canvas id="evolutionLineChart"></canvas>
                 </div>
             </div>
@@ -38,9 +38,9 @@
         <script>
             window.renderEvolutionLineChart = function () {
                 const dataEl = document.getElementById('evolution-chart-data');
-                const canvas = document.getElementById('evolutionLineChart');
+                const wrapper = document.getElementById('evolutionLineChartWrapper');
 
-                if (!dataEl || !canvas || typeof Chart === 'undefined') {
+                if (!dataEl || !wrapper || typeof Chart === 'undefined') {
                     return;
                 }
 
@@ -50,6 +50,9 @@
                 if (window.evolutionLineChartInstance) {
                     window.evolutionLineChartInstance.destroy();
                 }
+
+                wrapper.innerHTML = '<canvas id="evolutionLineChart"></canvas>';
+                const canvas = document.getElementById('evolutionLineChart');
 
                 window.evolutionLineChartInstance = new Chart(canvas.getContext('2d'), {
                     type: 'line',
@@ -101,21 +104,29 @@
                 });
             };
 
+            window.scheduleEvolutionLineChartRender = function () {
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        window.renderEvolutionLineChart();
+                    });
+                });
+
+                setTimeout(() => {
+                    window.renderEvolutionLineChart();
+                }, 150);
+            };
+
             document.addEventListener('livewire:navigated', window.renderEvolutionLineChart);
             document.addEventListener('DOMContentLoaded', window.renderEvolutionLineChart);
             document.addEventListener('livewire:init', () => {
                 Livewire.hook('morphed', ({ el }) => {
                     if (el && (el.id === 'evolution-chart-data' || el.querySelector?.('#evolution-chart-data'))) {
-                        requestAnimationFrame(() => {
-                            window.renderEvolutionLineChart();
-                        });
+                        window.scheduleEvolutionLineChartRender();
                     }
                 });
 
                 Livewire.on('evolution-category-changed', () => {
-                    setTimeout(() => {
-                        window.renderEvolutionLineChart();
-                    }, 50);
+                    window.scheduleEvolutionLineChartRender();
                 });
             });
         </script>
