@@ -36,7 +36,7 @@
 
     @once
         <script>
-            window.renderEvolutionLineChart = function () {
+            window.renderEvolutionLineChart = function (chartData = null) {
                 const dataEl = document.getElementById('evolution-chart-data');
                 const wrapper = document.getElementById('evolutionLineChartWrapper');
 
@@ -44,8 +44,8 @@
                     return;
                 }
 
-                const labels = JSON.parse(dataEl.dataset.labels || '[]');
-                const values = JSON.parse(dataEl.dataset.values || '[]');
+                const labels = chartData?.labels || JSON.parse(dataEl.dataset.labels || '[]');
+                const values = chartData?.values || JSON.parse(dataEl.dataset.values || '[]');
 
                 if (window.evolutionLineChartInstance) {
                     window.evolutionLineChartInstance.destroy();
@@ -104,15 +104,15 @@
                 });
             };
 
-            window.scheduleEvolutionLineChartRender = function () {
+            window.scheduleEvolutionLineChartRender = function (chartData = null) {
                 requestAnimationFrame(() => {
                     requestAnimationFrame(() => {
-                        window.renderEvolutionLineChart();
+                        window.renderEvolutionLineChart(chartData);
                     });
                 });
 
                 setTimeout(() => {
-                    window.renderEvolutionLineChart();
+                    window.renderEvolutionLineChart(chartData);
                 }, 150);
             };
 
@@ -125,8 +125,10 @@
                     }
                 });
 
-                Livewire.on('evolution-category-changed', () => {
-                    window.scheduleEvolutionLineChartRender();
+                Livewire.on('evolution-chart-updated', (payload) => {
+                    const chartData = payload?.chart || payload?.[0]?.chart || payload;
+
+                    window.scheduleEvolutionLineChartRender(chartData);
                 });
             });
         </script>
