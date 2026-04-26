@@ -67,7 +67,7 @@
                                     $gridValue = $maxValue - ($maxValue * $ratio);
                                 @endphp
                                 <line x1="{{ $left }}" y1="{{ $gridY }}" x2="{{ $left + $plotWidth }}" y2="{{ $gridY }}" stroke="#e9ecef" stroke-width="1" />
-                                <text x="{{ $left - 10 }}" y="{{ $gridY + 4 }}" text-anchor="end" font-size="11" fill="#6c757d">
+                                <text x="{{ $left - 10 }}" y="{{ $gridY + 4 }}" text-anchor="end" class="evolution-axis-label" fill="#6c757d">
                                     R$ {{ number_format($gridValue, 0, ',', '.') }}
                                 </text>
                             @endfor
@@ -80,13 +80,13 @@
 
                             @foreach ($points as $index => $point)
                                 <line x1="{{ $point['x'] }}" y1="{{ $baselineY }}" x2="{{ $point['x'] }}" y2="{{ $baselineY + 5 }}" stroke="#ced4da" stroke-width="1" />
-                                <text x="{{ $point['x'] }}" y="{{ $baselineY + 24 }}" text-anchor="middle" font-size="12" fill="#495057">
+                                <text x="{{ $point['x'] }}" y="{{ $baselineY + 24 }}" text-anchor="middle" class="evolution-month-label" fill="#495057">
                                     {{ $labels[$index] }}
                                 </text>
                                 <circle cx="{{ $point['x'] }}" cy="{{ $point['y'] }}" r="5" fill="#0d6efd" stroke="#ffffff" stroke-width="2">
                                     <title>{{ $labels[$index] }}: R$ {{ number_format($point['value'], 2, ',', '.') }}</title>
                                 </circle>
-                                <text x="{{ $point['x'] }}" y="{{ max($top + 12, $point['y'] - 12) }}" text-anchor="middle" font-size="11" fill="#0d6efd">
+                                <text x="{{ $point['x'] }}" y="{{ max($top + 12, $point['y'] - 12) }}" text-anchor="middle" class="evolution-value-label" fill="#0d6efd">
                                     R$ {{ number_format($point['value'], 2, ',', '.') }}
                                 </text>
                             @endforeach
@@ -96,4 +96,30 @@
             </div>
         </div>
     @endif
+
+    @once
+        <style>
+            .evolution-axis-label,
+            .evolution-value-label {
+                font-size: 11px;
+            }
+
+            .evolution-month-label {
+                font-size: 12px;
+            }
+
+            @media (max-width: 767.98px) {
+                .evolution-axis-label,
+                .evolution-value-label {
+                    font-size: 15px;
+                    font-weight: 600;
+                }
+
+                .evolution-month-label {
+                    font-size: 16px;
+                    font-weight: 600;
+                }
+            }
+        </style>
+    @endonce
 </div>
