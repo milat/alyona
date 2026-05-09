@@ -10,13 +10,11 @@ use Livewire\Component;
 class CreateForm extends Component
 {
     public string $name = '';
-    public string $budget_period_type = BudgetPeriod::CALENDAR_MONTH;
 
     public function create(): void
     {
         $data = $this->validate([
             'name' => ['required', 'string', 'max:255'],
-            'budget_period_type' => ['required', 'in:' . implode(',', Household::budgetPeriodOptions())],
         ]);
 
         $user = auth()->user();
@@ -29,7 +27,7 @@ class CreateForm extends Component
         $household = Household::create([
             'name' => $data['name'],
             'owner_id' => $user->id,
-            'budget_period_type' => $data['budget_period_type'],
+            'budget_period_type' => BudgetPeriod::CALENDAR_MONTH,
         ]);
 
         $user->household_id = $household->id;

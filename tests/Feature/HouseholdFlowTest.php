@@ -23,7 +23,6 @@ class HouseholdFlowTest extends TestCase
         Livewire::actingAs($user)
             ->test(CreateForm::class)
             ->set('name', 'Familia Silva')
-            ->set('budget_period_type', BudgetPeriod::FIFTH_BUSINESS_DAY)
             ->call('create');
 
         $user->refresh();
@@ -33,7 +32,7 @@ class HouseholdFlowTest extends TestCase
         $this->assertDatabaseHas('households', [
             'id' => $user->household_id,
             'name' => 'Familia Silva',
-            'budget_period_type' => BudgetPeriod::FIFTH_BUSINESS_DAY,
+            'budget_period_type' => BudgetPeriod::CALENDAR_MONTH,
         ]);
 
         $this->assertDatabaseHas('categories', [

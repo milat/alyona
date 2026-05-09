@@ -6,18 +6,23 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class HouseholdBudgetPeriodOverride extends Model
+class CreditCard extends Model
 {
     use HasFactory;
 
     protected $fillable = [
         'household_id',
-        'period_month',
-        'start_date',
+        'title',
+        'closing_day',
+        'limit',
+        'observation',
+        'is_active',
     ];
 
     protected $casts = [
-        'start_date' => 'date',
+        'closing_day' => 'integer',
+        'limit' => 'decimal:2',
+        'is_active' => 'boolean',
     ];
 
     public function household(): BelongsTo

@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\CreditCard;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/', 'index')->name('home');
@@ -13,13 +14,20 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::view('/households/create', 'households.create')->name('households.create');
     Route::view('/households/invitations/create', 'households.invite')->name('households.invitations.create');
-    Route::view('/households/period-settings', 'households.period-settings')->name('households.period-settings');
     Route::view('/categories', 'categories.index')->name('categories.index');
     Route::view('/categories/create', 'categories.create')->name('categories.create');
     Route::get('/categories/{category}/edit', function (App\Models\Category $category) {
         return view('categories.edit', compact('category'));
     })->name('categories.edit');
+    Route::view('/credit-cards', 'credit-cards.index')->name('credit-cards.index');
+    Route::view('/credit-cards/create', 'credit-cards.create')->name('credit-cards.create');
+    Route::get('/credit-cards/{creditCard}/edit', function (CreditCard $creditCard) {
+        return view('credit-cards.edit', compact('creditCard'));
+    })->name('credit-cards.edit');
     Route::view('/purchases', 'purchases.index')->name('purchases.index');
+    Route::get('/purchases/{purchase}/edit', function (App\Models\Purchase $purchase) {
+        return view('purchases.edit', compact('purchase'));
+    })->name('purchases.edit');
     Route::view('/evolution', 'evolutions.index')->name('evolution.index');
     // Edicao de compras removida por requisicao
     Route::view('/incomes', 'incomes.index')->name('incomes.index');

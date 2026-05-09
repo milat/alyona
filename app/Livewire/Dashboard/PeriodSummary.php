@@ -27,6 +27,12 @@ class PeriodSummary extends Component
         $this->dispatch('dashboard-period-changed');
     }
 
+    public function selectMonth(string $month): void
+    {
+        $this->selectedMonth = $month;
+        $this->dispatch('dashboard-period-changed');
+    }
+
     public function render()
     {
         $user = auth()->user();
@@ -40,6 +46,10 @@ class PeriodSummary extends Component
                 'periodRangeLabel' => '',
                 'totalSpent' => 0,
                 'totalBudget' => 0,
+                'nextMonthTotal' => 0,
+                'nextMonthValue' => null,
+                'nextMonthLabel' => '',
+                'showNextMonthTotal' => false,
             ]);
         }
 
@@ -63,6 +73,16 @@ class PeriodSummary extends Component
         $referenceMonth = $this->selectedMonth ?: $currentMonth;
         [$year, $month] = explode('-', $referenceMonth);
         $period = BudgetPeriod::forYearMonth($household, (int) $year, (int) $month);
+        $nextMonth = Carbon::createFromFormat('Y-m', $currentMonth)->addMonthNoOverflow();
+        $nextMonthValue = $nextMonth->format('Y-m');
+        $nextMonthPeriod = BudgetPeriod::forYearMonth($household, (int) $nextMonth->format('Y'), (int) $nextMonth->format('m'));
+        $nextMonthTotal = (float) Purchase::query()
+            ->where('household_id', $household->id)
+            ->whereBetween('reference_date', [
+                $nextMonthPeriod['start']->toDateString(),
+                $nextMonthPeriod['end']->toDateString(),
+            ])
+            ->sum('amount');
 
         $categories = Category::query()
             ->where('household_id', $household->id)
@@ -74,7 +94,7 @@ class PeriodSummary extends Component
         $spentByCategory = Purchase::query()
             ->selectRaw('category_id, SUM(amount) as total')
             ->where('household_id', $household->id)
-            ->whereBetween('purchased_at', [$period['start']->toDateString(), $period['end']->toDateString()])
+            ->whereBetween('reference_date', [$period['start']->toDateString(), $period['end']->toDateString()])
             ->groupBy('category_id')
             ->pluck('total', 'category_id');
 
@@ -153,6 +173,10 @@ class PeriodSummary extends Component
             'periodRangeLabel' => 'De ' . $period['start']->format('d/m/Y') . ' até ' . $period['end']->format('d/m/Y'),
             'totalSpent' => $rows->sum('spent'),
             'totalBudget' => $rows->filter(fn (array $row) => $row['budget'] !== null)->sum('budget'),
+            'nextMonthTotal' => $nextMonthTotal,
+            'nextMonthValue' => $nextMonthValue,
+            'nextMonthLabel' => $this->formatMonthName($nextMonth),
+            'showNextMonthTotal' => $referenceMonth === $currentMonth,
         ]);
     }
 
@@ -165,11 +189,12 @@ class PeriodSummary extends Component
 
         $periodMonths = Purchase::query()
             ->where('household_id', $household->id)
-            ->orderByDesc('purchased_at')
-            ->get(['purchased_at'])
+            ->orderByDesc('reference_date')
+            ->get(['reference_date'])
             ->toBase()
-            ->map(fn (Purchase $purchase) => BudgetPeriod::forHousehold($household, $purchase->purchased_at)['period_month'])
+            ->map(fn (Purchase $purchase) => BudgetPeriod::forHousehold($household, $purchase->reference_date)['period_month'])
             ->push($currentMonth)
+            ->push(Carbon::createFromFormat('Y-m', $currentMonth)->addMonthNoOverflow()->format('Y-m'))
             ->unique()
             ->filter(fn (string $value) => $value >= $windowStart && $value <= $windowEnd)
             ->sortDesc()
@@ -187,6 +212,11 @@ class PeriodSummary extends Component
 
     private function formatMonthLabel(Carbon $date): string
     {
+        return $this->formatMonthName($date) . ' / ' . $date->format('Y');
+    }
+
+    private function formatMonthName(Carbon $date): string
+    {
         $months = [
             1 => 'Janeiro',
             2 => 'Fevereiro',
@@ -202,7 +232,7 @@ class PeriodSummary extends Component
             12 => 'Dezembro',
         ];
 
-        return $months[(int) $date->format('n')] . ' / ' . $date->format('Y');
+        return $months[(int) $date->format('n')];
     }
 
 }
