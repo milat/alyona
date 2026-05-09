@@ -61,9 +61,9 @@ class DashboardPeriodSummaryTest extends TestCase
             ->assertDontSee('R$ 150,00');
     }
 
-    public function test_dashboard_uses_fifth_business_day_period_boundaries(): void
+    public function test_dashboard_uses_calendar_month_boundaries_for_legacy_households(): void
     {
-        $user = $this->createUserInHousehold(BudgetPeriod::FIFTH_BUSINESS_DAY);
+        $user = $this->createUserInHousehold('fifth_business_day');
 
         $category = Category::create([
             'household_id' => $user->household_id,
@@ -85,7 +85,7 @@ class DashboardPeriodSummaryTest extends TestCase
             'user_id' => $user->id,
             'category_id' => $category->id,
             'payment_method_id' => $payment->id,
-            'title' => 'Compra dentro do período de fevereiro',
+            'title' => 'Compra de marco',
             'amount' => 100,
             'purchased_at' => '2026-03-04',
         ]);
@@ -102,9 +102,8 @@ class DashboardPeriodSummaryTest extends TestCase
 
         Livewire::actingAs($user)
             ->test(PeriodSummary::class)
-            ->set('selectedMonth', '2026-02')
-            ->assertSee('R$ 100,00')
-            ->assertDontSee('R$ 300,00');
+            ->set('selectedMonth', '2026-03')
+            ->assertSee('R$ 300,00');
     }
 
     private function createUserInHousehold(string $budgetPeriodType): User

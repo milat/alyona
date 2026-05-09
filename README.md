@@ -17,16 +17,14 @@ Aplicação web para controle financeiro doméstico com compartilhamento por gru
   - Cada usuário participa de apenas um grupo.
   - Criação de grupo e convite por e-mail.
   - Convite com aceite/recusa na home.
-- Período orçamentário por household:
+- Período orçamentário:
   - Mês calendário (1º ao último dia).
-  - 5º dia útil até o dia anterior ao próximo 5º dia útil.
 - Categorias:
   - CRUD de categorias com cor e status (ativa/inativa).
   - Orçamento por categoria com histórico por vigência (`effective_at`).
 - Compras:
   - Cadastro via modal (UX de web app sem reload de página).
   - Parcelamento com geração automática de compras futuras.
-  - Regra especial para household no 5º dia útil: 1 parcela por período orçamentário.
   - Listagem com filtros por mês e categoria, paginação e exclusão.
 - Entradas:
   - CRUD de entradas mensais por usuário no household.

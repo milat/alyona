@@ -4,11 +4,11 @@ namespace App\Livewire\Purchases;
 
 use App\Models\Category;
 use App\Models\CategoryBudget;
+use App\Models\CreditCard;
 use App\Models\PaymentMethod;
 use App\Models\Purchase;
 use App\Support\BudgetPeriod;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 
 class CreateModal extends Component
@@ -17,6 +17,8 @@ class CreateModal extends Component
     public ?string $description = null;
     public ?int $category_id = null;
     public ?int $payment_method_id = null;
+    public ?int $credit_card_id = null;
+    public ?string $payment_option = null;
     public ?string $amount = null;
     public ?string $installments = null;
     public string $purchased_at = '';
@@ -37,11 +39,16 @@ class CreateModal extends Component
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'category_id' => ['required', 'integer'],
-            'payment_method_id' => ['required', 'integer'],
+            'payment_option' => ['nullable', 'string'],
             'amount' => ['required', 'numeric', 'min:0.01'],
             'installments' => ['nullable', 'integer', 'min:1', 'max:99'],
             'purchased_at' => ['required', 'date'],
         ]);
+
+        if (! $this->resolvePaymentSelection()) {
+            $this->addError('payment_option', 'Selecione um meio de pagamento válido.');
+            return;
+        }
 
         $this->confirming = true;
     }
@@ -98,7 +105,7 @@ class CreateModal extends Component
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'category_id' => ['required', 'integer'],
-            'payment_method_id' => ['required', 'integer'],
+            'payment_option' => ['nullable', 'string'],
             'amount' => ['required', 'numeric', 'min:0.01'],
             'installments' => ['nullable', 'integer', 'min:1', 'max:99'],
             'purchased_at' => ['required', 'date'],
@@ -122,14 +129,22 @@ class CreateModal extends Component
             ->where('is_active', true)
             ->firstOrFail();
 
-        $paymentMethod = PaymentMethod::where('id', $data['payment_method_id'])->firstOrFail();
+        $paymentSelection = $this->resolvePaymentSelection();
 
-        $isCredit = mb_strtolower(trim($paymentMethod->name)) === 'crédito';
+        if (! $paymentSelection) {
+            $this->addError('payment_option', 'Selecione um meio de pagamento válido.');
+            return;
+        }
+
+        $paymentMethod = $paymentSelection['payment_method'];
+        $creditCard = $paymentSelection['credit_card'];
+        $isCredit = $creditCard !== null;
         $installments = $isCredit ? max(1, (int) ($data['installments'] ?? 1)) : 1;
 
         $totalAmount = (float) $data['amount'];
         $baseAmount = round($totalAmount / $installments, 2);
         $accumulated = 0.0;
+        $baseReferenceDate = $this->resolveBaseReferenceDate($data['purchased_at'], $creditCard);
 
         for ($i = 1; $i <= $installments; $i++) {
             $amount = $i === $installments ? round($totalAmount - $accumulated, 2) : $baseAmount;
@@ -142,14 +157,16 @@ class CreateModal extends Component
                 'user_id' => $user->id,
                 'category_id' => $category->id,
                 'payment_method_id' => $paymentMethod->id,
+                'credit_card_id' => $creditCard?->id,
                 'title' => $data['title'] . $titleSuffix,
                 'description' => $data['description'],
                 'amount' => $amount,
                 'purchased_at' => $this->resolveInstallmentDate($household, $data['purchased_at'], $i),
+                'reference_date' => $baseReferenceDate->copy()->addMonthsNoOverflow($i - 1)->toDateString(),
             ]);
         }
 
-        $this->reset(['title', 'description', 'category_id', 'payment_method_id', 'amount', 'installments']);
+        $this->reset(['title', 'description', 'category_id', 'payment_method_id', 'credit_card_id', 'payment_option', 'amount', 'installments']);
         $this->purchased_at = now()->toDateString();
         $this->confirming = false;
 
@@ -261,42 +278,107 @@ class CreateModal extends Component
         return true;
     }
 
+    /**
+     * @return array{payment_method: PaymentMethod, credit_card: CreditCard|null}|null
+     */
+    private function resolvePaymentSelection(): ?array
+    {
+        $user = auth()->user();
+
+        if (! $user || $user->household_id === null) {
+            return null;
+        }
+
+        if ($this->payment_option && str_starts_with($this->payment_option, 'card:')) {
+            $creditCardId = (int) str_replace('card:', '', $this->payment_option);
+            $creditCard = CreditCard::query()
+                ->where('id', $creditCardId)
+                ->where('household_id', $user->household_id)
+                ->where('is_active', true)
+                ->first();
+
+            $paymentMethod = PaymentMethod::query()
+                ->whereRaw('LOWER(name) = ?', ['crédito'])
+                ->first();
+
+            if (! $creditCard || ! $paymentMethod) {
+                return null;
+            }
+
+            $this->payment_method_id = $paymentMethod->id;
+            $this->credit_card_id = $creditCard->id;
+
+            return [
+                'payment_method' => $paymentMethod,
+                'credit_card' => $creditCard,
+            ];
+        }
+
+        if ($this->payment_option && str_starts_with($this->payment_option, 'method:')) {
+            $this->payment_method_id = (int) str_replace('method:', '', $this->payment_option);
+            $this->credit_card_id = null;
+        }
+
+        if (! $this->payment_method_id) {
+            return null;
+        }
+
+        $paymentMethod = PaymentMethod::query()
+            ->where('id', $this->payment_method_id)
+            ->first();
+
+        if (! $paymentMethod) {
+            return null;
+        }
+
+        $isCreditMethod = mb_strtolower(trim($paymentMethod->name)) === 'crédito';
+
+        if ($isCreditMethod && $this->credit_card_id) {
+            $creditCard = CreditCard::query()
+                ->where('id', $this->credit_card_id)
+                ->where('household_id', $user->household_id)
+                ->where('is_active', true)
+                ->first();
+
+            if (! $creditCard) {
+                return null;
+            }
+
+            return [
+                'payment_method' => $paymentMethod,
+                'credit_card' => $creditCard,
+            ];
+        }
+
+        if ($isCreditMethod) {
+            return null;
+        }
+
+        $this->credit_card_id = null;
+
+        return [
+            'payment_method' => $paymentMethod,
+            'credit_card' => null,
+        ];
+    }
+
     private function resolveInstallmentDate($household, string $basePurchasedAt, int $installmentNumber): string
     {
         $baseDate = Carbon::parse($basePurchasedAt)->startOfDay();
-        $periodType = $household->budget_period_type ?? BudgetPeriod::CALENDAR_MONTH;
 
-        if ($installmentNumber === 1) {
-            return $baseDate->toDateString();
+        return $baseDate->toDateString();
+    }
+
+    private function resolveBaseReferenceDate(string $purchasedAt, ?CreditCard $creditCard): Carbon
+    {
+        $purchaseDate = Carbon::parse($purchasedAt)->startOfDay();
+        $referenceDate = $purchaseDate->copy()->startOfMonth();
+
+        if ($creditCard && $purchaseDate->day >= $creditCard->closing_day) {
+            return $referenceDate->addMonthNoOverflow();
         }
 
-        if ($periodType !== BudgetPeriod::FIFTH_BUSINESS_DAY) {
-            return $baseDate->copy()->addMonthsNoOverflow($installmentNumber - 1)->toDateString();
-        }
-
-        $basePeriod = BudgetPeriod::forHousehold($household, $baseDate);
-        $targetMonth = Carbon::createFromFormat('Y-m', $basePeriod['period_month'])
-            ->startOfMonth()
-            ->addMonthsNoOverflow($installmentNumber - 1);
-
-        $targetPeriod = BudgetPeriod::forYearMonth($household, (int) $targetMonth->format('Y'), (int) $targetMonth->format('m'));
-        $dayInTargetMonth = min($baseDate->day, $targetMonth->copy()->endOfMonth()->day);
-
-        $candidateDate = Carbon::create(
-            (int) $targetMonth->format('Y'),
-            (int) $targetMonth->format('m'),
-            $dayInTargetMonth
-        )->startOfDay();
-
-        if ($candidateDate->lt($targetPeriod['start'])) {
-            return $targetPeriod['start']->toDateString();
-        }
-
-        if ($candidateDate->gt($targetPeriod['end'])) {
-            return $targetPeriod['end']->toDateString();
-        }
-
-        return $candidateDate->toDateString();
+        return $referenceDate;
     }
 
     public function render()
@@ -304,6 +386,9 @@ class CreateModal extends Component
         $user = auth()->user();
         $categories = collect();
         $remainingByCategory = collect();
+        $creditCards = collect();
+        $paymentMethodUsage = collect();
+        $creditCardUsage = collect();
 
         if ($user && $user->household_id !== null && $user->household) {
             $household = $user->household;
@@ -345,7 +430,7 @@ class CreateModal extends Component
             $spent = Purchase::query()
                 ->selectRaw('category_id, SUM(amount) as total')
                 ->where('household_id', $user->household_id)
-                ->whereBetween('purchased_at', [$period['start']->toDateString(), $period['end']->toDateString()])
+                ->whereBetween('reference_date', [$period['start']->toDateString(), $period['end']->toDateString()])
                 ->groupBy('category_id')
                 ->pluck('total', 'category_id');
 
@@ -357,19 +442,56 @@ class CreateModal extends Component
                 $spentValue = (float) ($spent[$id] ?? 0);
                 return [$id => (float) $budget - $spentValue];
             });
+
+            $creditCards = CreditCard::query()
+                ->where('household_id', $user->household_id)
+                ->where('is_active', true)
+                ->orderBy('title')
+                ->get();
+
+            $paymentMethodUsage = Purchase::query()
+                ->selectRaw('payment_method_id, COUNT(*) as usage_count')
+                ->where('household_id', $user->household_id)
+                ->whereNotNull('payment_method_id')
+                ->groupBy('payment_method_id')
+                ->pluck('usage_count', 'payment_method_id');
+
+            $creditCardUsage = Purchase::query()
+                ->selectRaw('credit_card_id, COUNT(*) as usage_count')
+                ->where('household_id', $user->household_id)
+                ->whereNotNull('credit_card_id')
+                ->groupBy('credit_card_id')
+                ->pluck('usage_count', 'credit_card_id');
         }
 
         $paymentMethods = PaymentMethod::query()
             ->orderBy('name')
-            ->get();
+            ->get()
+            ->filter(fn (PaymentMethod $method) => mb_strtolower(trim($method->name)) !== 'crédito')
+            ->sort(function (PaymentMethod $a, PaymentMethod $b) use ($paymentMethodUsage) {
+                $usageComparison = ((int) ($paymentMethodUsage[$b->id] ?? 0)) <=> ((int) ($paymentMethodUsage[$a->id] ?? 0));
 
-        $creditMethodId = $paymentMethods
-            ->first(fn ($method) => mb_strtolower(trim($method->name)) === 'crédito')
+                return $usageComparison !== 0 ? $usageComparison : strcasecmp($a->name, $b->name);
+            })
+            ->values();
+
+        $creditCards = $creditCards
+            ->sort(function (CreditCard $a, CreditCard $b) use ($creditCardUsage) {
+                $usageComparison = ((int) ($creditCardUsage[$b->id] ?? 0)) <=> ((int) ($creditCardUsage[$a->id] ?? 0));
+
+                return $usageComparison !== 0 ? $usageComparison : strcasecmp($a->title, $b->title);
+            })
+            ->values();
+
+        $creditMethodId = PaymentMethod::query()
+            ->get()
+            ->first(fn (PaymentMethod $method) => mb_strtolower(trim($method->name)) === 'crédito')
             ?->id;
 
         return view('livewire.purchases.create-modal', [
             'categories' => $categories,
             'paymentMethods' => $paymentMethods,
+            'creditCards' => $creditCards,
             'remainingByCategory' => $remainingByCategory,
             'creditMethodId' => $creditMethodId,
         ]);

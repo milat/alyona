@@ -86,7 +86,7 @@ class Index extends Component
 
                 $categoryIdsWithPurchases = Purchase::query()
                     ->where('household_id', $user->household_id)
-                    ->whereBetween('purchased_at', [
+                    ->whereBetween('reference_date', [
                         $period['start']->toDateString(),
                         $period['end']->toDateString(),
                     ])
@@ -109,14 +109,14 @@ class Index extends Component
             }
 
             $query = Purchase::query()
-                ->with(['category', 'paymentMethod', 'user'])
+                ->with(['category', 'paymentMethod', 'creditCard', 'user'])
                 ->where('household_id', $user->household_id)
                 ->orderByDesc('created_at');
 
             if ($this->selectedMonth) {
                 [$year, $month] = explode('-', $this->selectedMonth);
                 $period = BudgetPeriod::forYearMonth($household, (int) $year, (int) $month);
-                $query->whereBetween('purchased_at', [
+                $query->whereBetween('reference_date', [
                     $period['start']->toDateString(),
                     $period['end']->toDateString(),
                 ]);
@@ -147,10 +147,10 @@ class Index extends Component
 
         $periodMonths = Purchase::query()
             ->where('household_id', $household->id)
-            ->orderByDesc('purchased_at')
-            ->get(['purchased_at'])
+            ->orderByDesc('reference_date')
+            ->get(['reference_date'])
             ->toBase()
-            ->map(fn (Purchase $purchase) => BudgetPeriod::forHousehold($household, $purchase->purchased_at)['period_month'])
+            ->map(fn (Purchase $purchase) => BudgetPeriod::forHousehold($household, $purchase->reference_date)['period_month'])
             ->push($currentMonth)
             ->unique()
             ->filter(fn (string $value) => $value >= $windowStart && $value <= $windowEnd)

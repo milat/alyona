@@ -30,6 +30,11 @@
                             <i class="bi bi-tags me-1"></i>Categorias
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" aria-current="page" href="{{ route('credit-cards.index') }}" wire:navigate>
+                            <i class="bi bi-credit-card me-1"></i>Cartões
+                        </a>
+                    </li>
                 </ul>
             @endauth
             <ul class="navbar-nav justify-content-end flex-grow-1 pe-3">
@@ -46,9 +51,6 @@
                         <ul class="dropdown-menu dropdown-menu-end">
                             @if (auth()->user()->household)
                                 <li><a class="dropdown-item" href="{{ route('households.invitations.create') }}" wire:navigate><i class="bi bi-person-plus me-2"></i>Convidar um amigo</a></li>
-                                @if (auth()->user()->household->budget_period_type === \App\Support\BudgetPeriod::FIFTH_BUSINESS_DAY)
-                                    <li><a class="dropdown-item" href="{{ route('households.period-settings') }}" wire:navigate><i class="bi bi-calendar2-week me-2"></i>Configurar 5º dia útil</a></li>
-                                @endif
                                 <li><hr class="dropdown-divider"></li>
                             @endif
                             <li>

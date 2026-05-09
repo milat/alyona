@@ -30,7 +30,13 @@
                                         @endif
                                     </dd>
                                     <dt class="col-5">Pagamento</dt>
-                                    <dd class="col-7">{{ optional($paymentMethods->firstWhere('id', $payment_method_id))->name }}</dd>
+                                    <dd class="col-7">
+                                        @if ($credit_card_id)
+                                            Crédito ({{ optional($creditCards->firstWhere('id', $credit_card_id))->title }})
+                                        @else
+                                            {{ optional($paymentMethods->firstWhere('id', $payment_method_id))->name }}
+                                        @endif
+                                    </dd>
                                     <dt class="col-5">Parcelas</dt>
                                     <dd class="col-7">{{ $installments ?: 'Sem parcelamento' }}</dd>
                                     <dt class="col-5">Valor</dt>
@@ -38,7 +44,7 @@
                                     @php
                                         $effectiveInstallments = (int) ($installments ?: 1);
                                     @endphp
-                                    @if ($payment_method_id == $creditMethodId && $effectiveInstallments > 1)
+                                    @if ($credit_card_id && $effectiveInstallments > 1)
                                         @php
                                             $perInstallment = round((float) $amount / $effectiveInstallments, 2);
                                         @endphp
@@ -113,14 +119,17 @@
 
                             <div class="row g-3 mb-3">
                                 <div class="col-6">
-                                    <label class="form-label" for="payment_method_id">Meio de pagamento</label>
-                                    <select id="payment_method_id" class="form-select" wire:model.live="payment_method_id" required>
+                                    <label class="form-label" for="payment_option">Meio de pagamento</label>
+                                    <select id="payment_option" class="form-select" wire:model.live="payment_option" required>
                                         <option value="">Selecione</option>
                                         @foreach ($paymentMethods as $method)
-                                            <option value="{{ $method->id }}">{{ $method->name }}</option>
+                                            <option value="method:{{ $method->id }}">{{ $method->name }}</option>
+                                        @endforeach
+                                        @foreach ($creditCards as $creditCard)
+                                            <option value="card:{{ $creditCard->id }}">Crédito ({{ $creditCard->title }})</option>
                                         @endforeach
                                     </select>
-                                    @error('payment_method_id')
+                                    @error('payment_option')
                                         <div class="text-danger mt-2">{{ $message }}</div>
                                     @enderror
                                 </div>

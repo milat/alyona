@@ -80,9 +80,16 @@
                                         <span class="text-secondary">--</span>
                                     @endif
                                 </td>
-                                <td>{{ $purchase->paymentMethod?->name }}</td>
+                                <td>
+                                    @if ($purchase->creditCard)
+                                        Crédito ({{ $purchase->creditCard->title }})
+                                    @else
+                                        {{ $purchase->paymentMethod?->name }}
+                                    @endif
+                                </td>
                                 <td class="text-end text-nowrap">R$ {{ number_format($purchase->amount, 2, ',', '.') }}</td>
                                 <td class="text-end">
+                                    <a href="{{ route('purchases.edit', $purchase) }}" class="btn btn-outline-dark btn-sm" wire:navigate>Editar</a>
                                     <button
                                         type="button"
                                         class="btn btn-outline-danger btn-sm"

@@ -53,20 +53,25 @@ class Index extends Component
     {
         $purchaseQuery = Purchase::query()
             ->where('household_id', $household->id)
-            ->orderByDesc('purchased_at');
+            ->orderByDesc('reference_date');
 
         if ($selectedCategoryId !== null) {
             $purchaseQuery->where('category_id', (int) $selectedCategoryId);
         }
 
         $totalsByPeriod = $purchaseQuery
-            ->get(['amount', 'purchased_at'])
-            ->groupBy(fn (Purchase $purchase) => BudgetPeriod::forHousehold($household, $purchase->purchased_at)['period_month'])
+            ->get(['amount', 'reference_date'])
+            ->groupBy(fn (Purchase $purchase) => BudgetPeriod::forHousehold($household, $purchase->reference_date)['period_month'])
             ->map(fn (Collection $purchases) => round((float) $purchases->sum('amount'), 2));
 
         $currentPeriodMonth = BudgetPeriod::currentPeriodMonth($household);
+        $nextPeriodMonth = Carbon::createFromFormat('Y-m', $currentPeriodMonth)->addMonthNoOverflow()->format('Y-m');
+        $lastPeriodMonth = (float) ($totalsByPeriod[$nextPeriodMonth] ?? 0) > 0
+            ? $nextPeriodMonth
+            : $currentPeriodMonth;
+
         $periodMonths = collect(range(0, 5))
-            ->map(fn (int $offset) => Carbon::createFromFormat('Y-m', $currentPeriodMonth)->subMonthsNoOverflow(5 - $offset)->format('Y-m'))
+            ->map(fn (int $offset) => Carbon::createFromFormat('Y-m', $lastPeriodMonth)->subMonthsNoOverflow(5 - $offset)->format('Y-m'))
             ->values();
 
         $firstPeriodWithExpenseIndex = $periodMonths->search(fn (string $periodMonth) => (float) ($totalsByPeriod[$periodMonth] ?? 0) > 0);
