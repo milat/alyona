@@ -24,11 +24,8 @@
         <label class="form-label" for="payment_option">Meio de pagamento</label>
         <select id="payment_option" class="form-select" wire:model.defer="payment_option" required>
             <option value="">Selecione</option>
-            @foreach ($paymentMethods as $method)
-                <option value="method:{{ $method->id }}">{{ $method->name }}</option>
-            @endforeach
-            @foreach ($creditCards as $creditCard)
-                <option value="card:{{ $creditCard->id }}">Crédito ({{ $creditCard->title }})</option>
+            @foreach ($paymentOptions as $option)
+                <option value="{{ $option['value'] }}">{{ $option['label'] }}</option>
             @endforeach
         </select>
         @error('payment_option')

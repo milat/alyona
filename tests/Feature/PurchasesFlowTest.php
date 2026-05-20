@@ -346,6 +346,118 @@ class PurchasesFlowTest extends TestCase
         $this->travelBack();
     }
 
+
+    public function test_payment_options_are_ordered_by_last_30_days_usage(): void
+    {
+        $this->travelTo(now()->setDate(2026, 1, 31));
+
+        $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
+        $category = $this->createCategory($user, true, 'Mercado');
+        $debit = PaymentMethod::create(['name' => 'Débito']);
+        $pix = PaymentMethod::create(['name' => 'Pix']);
+        $cash = PaymentMethod::create(['name' => 'Em espécie']);
+        $credit = PaymentMethod::create(['name' => 'Crédito']);
+        $creditCard = CreditCard::create([
+            'household_id' => $user->household_id,
+            'title' => 'Nubank',
+            'closing_day' => 10,
+            'is_active' => true,
+        ]);
+
+        foreach ([1, 2, 3] as $day) {
+            Purchase::create([
+                'household_id' => $user->household_id,
+                'user_id' => $user->id,
+                'category_id' => $category->id,
+                'payment_method_id' => $pix->id,
+                'title' => 'Pix ' . $day,
+                'amount' => 10,
+                'purchased_at' => '2026-01-0' . $day,
+            ]);
+        }
+
+        foreach ([4, 5] as $day) {
+            Purchase::create([
+                'household_id' => $user->household_id,
+                'user_id' => $user->id,
+                'category_id' => $category->id,
+                'payment_method_id' => $credit->id,
+                'credit_card_id' => $creditCard->id,
+                'title' => 'Crédito ' . $day,
+                'amount' => 10,
+                'purchased_at' => '2026-01-0' . $day,
+            ]);
+        }
+
+        Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $category->id,
+            'payment_method_id' => $debit->id,
+            'title' => 'Débito recente',
+            'amount' => 10,
+            'purchased_at' => '2026-01-06',
+        ]);
+
+        Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $category->id,
+            'payment_method_id' => $cash->id,
+            'title' => 'Compra antiga',
+            'amount' => 10,
+            'purchased_at' => '2025-12-01',
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(CreateModal::class)
+            ->assertSeeInOrder(['Pix', 'Crédito (Nubank)', 'Débito', 'Em espécie']);
+
+        $this->travelBack();
+    }
+
+
+    public function test_purchase_category_filter_options_are_ordered_by_last_90_days_usage(): void
+    {
+        $this->travelTo(now()->setDate(2026, 4, 15));
+
+        $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
+        $debit = PaymentMethod::create(['name' => 'Débito']);
+        $frequentCategory = $this->createCategory($user, true, 'Mais usada');
+        $lessUsedCategory = $this->createCategory($user, true, 'Menos usada');
+
+        foreach ([1, 2, 3] as $day) {
+            Purchase::create([
+                'household_id' => $user->household_id,
+                'user_id' => $user->id,
+                'category_id' => $frequentCategory->id,
+                'payment_method_id' => $debit->id,
+                'title' => 'Compra frequente ' . $day,
+                'amount' => 10,
+                'purchased_at' => '2026-04-0' . $day,
+                'reference_date' => '2026-04-01',
+            ]);
+        }
+
+        Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $lessUsedCategory->id,
+            'payment_method_id' => $debit->id,
+            'title' => 'Compra menos usada',
+            'amount' => 10,
+            'purchased_at' => '2026-04-10',
+            'reference_date' => '2026-04-01',
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(Index::class)
+            ->set('selectedMonth', '2026-04')
+            ->assertSeeInOrder(['Mais usada', 'Menos usada']);
+
+        $this->travelBack();
+    }
+
     private function createUserInHousehold(string $budgetPeriodType): User
     {
         $user = User::factory()->create();

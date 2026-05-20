@@ -104,11 +104,21 @@ class Index extends Component
 
     public function applySort(): void
     {
-        $allowedSorts = ['date', 'title', 'category', 'payment', 'amount'];
+        $allowedSorts = ['date', 'created_at', 'title', 'category', 'payment', 'amount'];
         $allowedDirections = ['asc', 'desc'];
 
         $this->sortBy = in_array($this->sortByInput, $allowedSorts, true) ? $this->sortByInput : 'date';
         $this->sortDirection = in_array($this->sortDirectionInput, $allowedDirections, true) ? $this->sortDirectionInput : 'desc';
+        $this->showSort = false;
+        $this->resetPage();
+    }
+
+    public function clearSort(): void
+    {
+        $this->sortBy = 'date';
+        $this->sortDirection = 'desc';
+        $this->sortByInput = 'date';
+        $this->sortDirectionInput = 'desc';
         $this->showSort = false;
         $this->resetPage();
     }
@@ -155,12 +165,24 @@ class Index extends Component
                     ->pluck('category_id');
             }
 
-            $categoryOptions = Category::query()
+            $categoryUsageStart = now()->copy()->subDays(90)->toDateString();
+            $categoryUsageSubquery = Purchase::query()
+                ->selectRaw('category_id, COUNT(*) as usage_count')
                 ->where('household_id', $user->household_id)
-                ->whereIn('id', $categoryIdsWithPurchases)
-                ->orderByDesc('is_active')
-                ->orderBy('description')
-                ->get(['id', 'description', 'is_active']);
+                ->whereDate('purchased_at', '>=', $categoryUsageStart)
+                ->groupBy('category_id');
+
+            $categoryOptions = Category::query()
+                ->leftJoinSub($categoryUsageSubquery, 'purchase_category_usage', function ($join) {
+                    $join->on('categories.id', '=', 'purchase_category_usage.category_id');
+                })
+                ->where('categories.household_id', $user->household_id)
+                ->whereIn('categories.id', $categoryIdsWithPurchases)
+                ->orderByRaw('COALESCE(purchase_category_usage.usage_count, 0) DESC')
+                ->orderByDesc('categories.is_active')
+                ->orderBy('categories.description')
+                ->select('categories.id', 'categories.description', 'categories.is_active')
+                ->get();
 
             if (
                 $this->selectedCategoryId !== null
@@ -270,6 +292,8 @@ class Index extends Component
             'date' => $query
                 ->orderBy('purchases.purchased_at', $direction)
                 ->orderBy('purchases.created_at', 'desc'),
+            'created_at' => $query
+                ->orderBy('purchases.created_at', $direction),
             'title' => $query
                 ->orderBy('purchases.title', $direction)
                 ->orderBy('purchases.created_at', 'desc'),
