@@ -389,10 +389,12 @@ class CreateModal extends Component
         $creditCards = collect();
         $paymentMethodUsage = collect();
         $creditCardUsage = collect();
+        $paymentOptions = collect();
 
         if ($user && $user->household_id !== null && $user->household) {
             $household = $user->household;
             $recentUsageStart = now()->copy()->subDays(90)->toDateString();
+            $paymentUsageStart = now()->copy()->subDays(30)->toDateString();
 
             $recentUsageSubquery = Purchase::query()
                 ->selectRaw('category_id, COUNT(*) as recent_usage_count')
@@ -452,6 +454,7 @@ class CreateModal extends Component
             $paymentMethodUsage = Purchase::query()
                 ->selectRaw('payment_method_id, COUNT(*) as usage_count')
                 ->where('household_id', $user->household_id)
+                ->whereDate('purchased_at', '>=', $paymentUsageStart)
                 ->whereNotNull('payment_method_id')
                 ->groupBy('payment_method_id')
                 ->pluck('usage_count', 'payment_method_id');
@@ -459,6 +462,7 @@ class CreateModal extends Component
             $creditCardUsage = Purchase::query()
                 ->selectRaw('credit_card_id, COUNT(*) as usage_count')
                 ->where('household_id', $user->household_id)
+                ->whereDate('purchased_at', '>=', $paymentUsageStart)
                 ->whereNotNull('credit_card_id')
                 ->groupBy('credit_card_id')
                 ->pluck('usage_count', 'credit_card_id');
@@ -483,6 +487,25 @@ class CreateModal extends Component
             })
             ->values();
 
+        $paymentOptions = collect($paymentMethods
+            ->map(fn (PaymentMethod $method) => [
+                'value' => 'method:' . $method->id,
+                'label' => $method->name,
+                'usage' => (int) ($paymentMethodUsage[$method->id] ?? 0),
+            ])
+            ->all())
+            ->merge($creditCards->map(fn (CreditCard $creditCard) => [
+                'value' => 'card:' . $creditCard->id,
+                'label' => 'Crédito (' . $creditCard->title . ')',
+                'usage' => (int) ($creditCardUsage[$creditCard->id] ?? 0),
+            ])->all())
+            ->sort(function (array $a, array $b) {
+                $usageComparison = $b['usage'] <=> $a['usage'];
+
+                return $usageComparison !== 0 ? $usageComparison : strcasecmp($a['label'], $b['label']);
+            })
+            ->values();
+
         $creditMethodId = PaymentMethod::query()
             ->get()
             ->first(fn (PaymentMethod $method) => mb_strtolower(trim($method->name)) === 'crédito')
@@ -492,6 +515,7 @@ class CreateModal extends Component
             'categories' => $categories,
             'paymentMethods' => $paymentMethods,
             'creditCards' => $creditCards,
+            'paymentOptions' => $paymentOptions,
             'remainingByCategory' => $remainingByCategory,
             'creditMethodId' => $creditMethodId,
         ]);

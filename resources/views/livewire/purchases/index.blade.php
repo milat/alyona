@@ -53,10 +53,11 @@
 
                 <div id="purchase-sort-panel" class="mt-2" style="display: {{ $showSort ? 'block' : 'none' }};">
                     <select class="form-select form-select-sm mb-2" wire:model="sortByInput">
-                        <option value="date">Data</option>
+                        <option value="date">Data da compra</option>
+                        <option value="created_at">Data de cadastro</option>
                         <option value="title">Título</option>
                         <option value="category">Categoria</option>
-                        <option value="payment">Pagamento</option>
+                        <option value="payment">Meio de pagamento</option>
                         <option value="amount">Valor</option>
                     </select>
 
@@ -71,7 +72,15 @@
                         </label>
                     </div>
 
-                    <div class="text-end">
+                    <div class="d-flex justify-content-end gap-2">
+                        <button
+                            type="button"
+                            class="btn btn-outline-danger btn-sm"
+                            wire:click="clearSort"
+                            aria-label="Limpar ordenação"
+                        >
+                            <i class="bi bi-trash"></i>
+                        </button>
                         <button type="button" class="btn btn-dark btn-sm" wire:click="applySort">Ordenar</button>
                     </div>
                 </div>
