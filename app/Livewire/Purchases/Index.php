@@ -192,6 +192,10 @@ class Index extends Component
             $filteredTotal = (float) (clone $query)->sum('purchases.amount');
             $this->applySorting($query);
             $purchases = $query->paginate(100)->withQueryString();
+
+            if ($purchases->isEmpty() && $this->hasActiveFilters()) {
+                $this->showSearch = true;
+            }
         }
 
         return view('livewire.purchases.index', [
@@ -249,6 +253,12 @@ class Index extends Component
         ];
 
         return $months[(int) $date->format('n')] . ' / ' . $date->format('Y');
+    }
+
+
+    private function hasActiveFilters(): bool
+    {
+        return $this->selectedCategoryId !== null || trim($this->search) !== '';
     }
 
 

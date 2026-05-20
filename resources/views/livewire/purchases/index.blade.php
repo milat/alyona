@@ -26,7 +26,7 @@
                         <button
                             type="button"
                             class="btn btn-sm {{ ($search !== '' || $selectedCategoryId !== null) ? 'btn-primary' : 'btn-outline-dark' }}"
-                            wire:click="toggleSearch"
+                            onclick="togglePurchaseListPanel('purchase-search-panel', this)"
                             aria-label="Buscar compras"
                             aria-expanded="{{ $showSearch ? 'true' : 'false' }}"
                         >
@@ -35,7 +35,7 @@
                         <button
                             type="button"
                             class="btn btn-sm {{ ($sortBy !== 'date' || $sortDirection !== 'desc') ? 'btn-primary' : 'btn-outline-dark' }}"
-                            wire:click="toggleSort"
+                            onclick="togglePurchaseListPanel('purchase-sort-panel', this)"
                             aria-label="Ordenar compras"
                             aria-expanded="{{ $showSort ? 'true' : 'false' }}"
                         >
@@ -47,64 +47,58 @@
                     </div>
                 </div>
 
-                @if ($showSort)
-                    <div class="mt-2">
-                        <select class="form-select form-select-sm mb-2" wire:model="sortByInput">
-                            <option value="date">Data</option>
-                            <option value="title">Título</option>
-                            <option value="category">Categoria</option>
-                            <option value="payment">Pagamento</option>
-                            <option value="amount">Valor</option>
+                <div id="purchase-sort-panel" class="mt-2" style="display: {{ $showSort ? 'block' : 'none' }};">
+                    <select class="form-select form-select-sm mb-2" wire:model="sortByInput">
+                        <option value="date">Data</option>
+                        <option value="title">Título</option>
+                        <option value="category">Categoria</option>
+                        <option value="payment">Pagamento</option>
+                        <option value="amount">Valor</option>
+                    </select>
+
+                    <div class="d-flex gap-3 small mb-2">
+                        <label class="d-flex align-items-center gap-1">
+                            <input type="radio" class="form-check-input mt-0" value="asc" wire:model="sortDirectionInput">
+                            Crescente
+                        </label>
+                        <label class="d-flex align-items-center gap-1">
+                            <input type="radio" class="form-check-input mt-0" value="desc" wire:model="sortDirectionInput">
+                            Decrescente
+                        </label>
+                    </div>
+
+                    <div class="text-end">
+                        <button type="button" class="btn btn-dark btn-sm" wire:click="applySort">Ordenar</button>
+                    </div>
+                </div>
+
+                <div id="purchase-search-panel" class="mt-2" style="display: {{ $showSearch ? 'block' : 'none' }};">
+                    @if ($categoryOptions->isNotEmpty())
+                        <select class="form-select form-select-sm mb-2" wire:model="categoryFilterInput">
+                            <option value="">Todas as categorias</option>
+                            @foreach ($categoryOptions as $category)
+                                <option value="{{ $category->id }}">{{ $category->description }}</option>
+                            @endforeach
                         </select>
-
-                        <div class="d-flex gap-3 small mb-2">
-                            <label class="d-flex align-items-center gap-1">
-                                <input type="radio" class="form-check-input mt-0" value="asc" wire:model="sortDirectionInput">
-                                Crescente
-                            </label>
-                            <label class="d-flex align-items-center gap-1">
-                                <input type="radio" class="form-check-input mt-0" value="desc" wire:model="sortDirectionInput">
-                                Decrescente
-                            </label>
-                        </div>
-
-                        <div class="text-end">
-                            <button type="button" class="btn btn-dark btn-sm" wire:click="applySort">Ordenar</button>
-                        </div>
-                    </div>
-                @endif
-
-
-                @if ($showSearch)
-                    <div class="mt-2">
-                        @if ($categoryOptions->isNotEmpty())
-                            <select class="form-select form-select-sm mb-2" wire:model="categoryFilterInput">
-                                <option value="">Todas as categorias</option>
-                                @foreach ($categoryOptions as $category)
-                                    <option value="{{ $category->id }}">{{ $category->description }}</option>
-                                @endforeach
-                            </select>
-                        @endif
-                        <input
-                            type="search"
-                            class="form-control form-control-sm"
-                            placeholder="Buscar por data, título, categoria, pagamento ou valor"
-                            wire:model="searchInput"
-                            autofocus
+                    @endif
+                    <input
+                        type="search"
+                        class="form-control form-control-sm"
+                        placeholder="Buscar por data, título, categoria, pagamento ou valor"
+                        wire:model="searchInput"
+                    >
+                    <div class="mt-2 d-flex justify-content-end gap-2">
+                        <button
+                            type="button"
+                            class="btn btn-outline-danger btn-sm"
+                            wire:click="clearFilters"
+                            aria-label="Limpar filtros"
                         >
-                        <div class="mt-2 d-flex justify-content-end gap-2">
-                            <button
-                                type="button"
-                                class="btn btn-outline-danger btn-sm"
-                                wire:click="clearFilters"
-                                aria-label="Limpar filtros"
-                            >
-                                <i class="bi bi-trash"></i>
-                            </button>
-                            <button type="button" class="btn btn-dark btn-sm" wire:click="applyFilters">Buscar</button>
-                        </div>
+                            <i class="bi bi-trash"></i>
+                        </button>
+                        <button type="button" class="btn btn-dark btn-sm" wire:click="applyFilters">Buscar</button>
                     </div>
-                @endif
+                </div>
             </div>
 
         @if ($purchases->isEmpty())
@@ -214,4 +208,23 @@
             </div>
         @endif
     @endif
+
+    @once
+        <script>
+            function togglePurchaseListPanel(panelId, button) {
+                const panel = document.getElementById(panelId);
+
+                if (!panel) {
+                    return;
+                }
+
+                const shouldShow = panel.style.display === 'none' || panel.style.display === '';
+                panel.style.display = shouldShow ? 'block' : 'none';
+
+                if (button) {
+                    button.setAttribute('aria-expanded', shouldShow ? 'true' : 'false');
+                }
+            }
+        </script>
+    @endonce
 </div>
