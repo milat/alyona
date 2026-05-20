@@ -20,12 +20,17 @@ class EditForm extends Component
     public ?int $credit_card_id = null;
     public ?string $amount = null;
     public string $purchased_at = '';
+    public ?string $returnMonth = null;
 
-    public function mount(int $purchaseId): void
+    public function mount(int $purchaseId, ?string $returnMonth = null): void
     {
         $purchase = $this->getPurchase($purchaseId);
 
         $this->purchaseId = $purchase->id;
+        $this->returnMonth = $returnMonth
+            ?: request()->query('mes')
+            ?: $purchase->reference_date?->format('Y-m')
+            ?: $purchase->purchased_at->format('Y-m');
         $this->title = $purchase->title;
         $this->description = $purchase->description;
         $this->category_id = $purchase->category_id;
@@ -80,7 +85,15 @@ class EditForm extends Component
 
         session()->flash('success', 'Compra atualizada com sucesso.');
 
-        $this->redirect(route('purchases.index'), navigate: true);
+        $this->redirect($this->purchasesIndexUrl(), navigate: true);
+    }
+
+
+    private function purchasesIndexUrl(): string
+    {
+        return route('purchases.index', array_filter([
+            'mes' => $this->returnMonth,
+        ]));
     }
 
     private function getPurchase(int $purchaseId): Purchase

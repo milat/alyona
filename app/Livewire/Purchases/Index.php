@@ -22,6 +22,33 @@ class Index extends Component
     #[Url(as: 'categoria', except: null)]
     public ?string $selectedCategoryId = null;
 
+    #[Url(as: 'busca', except: '')]
+    public string $search = '';
+
+    public ?string $categoryFilterInput = null;
+
+    public string $searchInput = '';
+
+    public bool $showSearch = false;
+
+    public bool $showSort = false;
+
+    public string $sortBy = 'date';
+
+    public string $sortDirection = 'desc';
+
+    public string $sortByInput = 'date';
+
+    public string $sortDirectionInput = 'desc';
+
+    public function mount(): void
+    {
+        $this->categoryFilterInput = $this->selectedCategoryId;
+        $this->searchInput = $this->search;
+        $this->sortByInput = $this->sortBy;
+        $this->sortDirectionInput = $this->sortDirection;
+    }
+
     #[On('purchase-saved')]
     public function refreshPurchases(): void
     {
@@ -47,8 +74,42 @@ class Index extends Component
         $this->resetPage();
     }
 
-    public function updatedSelectedCategoryId(): void
+    public function toggleSearch(): void
     {
+        $this->showSearch = ! $this->showSearch;
+    }
+
+    public function toggleSort(): void
+    {
+        $this->showSort = ! $this->showSort;
+    }
+
+    public function applyFilters(): void
+    {
+        $this->selectedCategoryId = $this->categoryFilterInput ?: null;
+        $this->search = trim($this->searchInput);
+        $this->showSearch = false;
+        $this->resetPage();
+    }
+
+    public function clearFilters(): void
+    {
+        $this->selectedCategoryId = null;
+        $this->categoryFilterInput = null;
+        $this->search = '';
+        $this->searchInput = '';
+        $this->showSearch = false;
+        $this->resetPage();
+    }
+
+    public function applySort(): void
+    {
+        $allowedSorts = ['date', 'title', 'category', 'payment', 'amount'];
+        $allowedDirections = ['asc', 'desc'];
+
+        $this->sortBy = in_array($this->sortByInput, $allowedSorts, true) ? $this->sortByInput : 'date';
+        $this->sortDirection = in_array($this->sortDirectionInput, $allowedDirections, true) ? $this->sortDirectionInput : 'desc';
+        $this->showSort = false;
         $this->resetPage();
     }
 
@@ -106,28 +167,31 @@ class Index extends Component
                 && ! $categoryOptions->contains(fn (Category $category) => (string) $category->id === $this->selectedCategoryId)
             ) {
                 $this->selectedCategoryId = null;
+                $this->categoryFilterInput = null;
             }
 
             $query = Purchase::query()
                 ->with(['category', 'paymentMethod', 'creditCard', 'user'])
-                ->where('household_id', $user->household_id)
-                ->orderByDesc('created_at');
+                ->where('purchases.household_id', $user->household_id);
 
             if ($this->selectedMonth) {
                 [$year, $month] = explode('-', $this->selectedMonth);
                 $period = BudgetPeriod::forYearMonth($household, (int) $year, (int) $month);
-                $query->whereBetween('reference_date', [
+                $query->whereBetween('purchases.reference_date', [
                     $period['start']->toDateString(),
                     $period['end']->toDateString(),
                 ]);
             }
 
             if ($this->selectedCategoryId !== null) {
-                $query->where('category_id', (int) $this->selectedCategoryId);
+                $query->where('purchases.category_id', (int) $this->selectedCategoryId);
             }
 
-            $filteredTotal = (float) (clone $query)->sum('amount');
-            $purchases = $query->paginate(10)->withQueryString();
+            $this->applySearch($query);
+
+            $filteredTotal = (float) (clone $query)->sum('purchases.amount');
+            $this->applySorting($query);
+            $purchases = $query->paginate(100)->withQueryString();
         }
 
         return view('livewire.purchases.index', [
@@ -185,5 +249,191 @@ class Index extends Component
         ];
 
         return $months[(int) $date->format('n')] . ' / ' . $date->format('Y');
+    }
+
+
+    private function applySorting($query): void
+    {
+        $direction = $this->sortDirection === 'asc' ? 'asc' : 'desc';
+
+        match ($this->sortBy) {
+            'date' => $query
+                ->orderBy('purchases.purchased_at', $direction)
+                ->orderBy('purchases.created_at', 'desc'),
+            'title' => $query
+                ->orderBy('purchases.title', $direction)
+                ->orderBy('purchases.created_at', 'desc'),
+            'category' => $query
+                ->select('purchases.*')
+                ->leftJoin('categories as sort_categories', 'sort_categories.id', '=', 'purchases.category_id')
+                ->orderBy('sort_categories.description', $direction)
+                ->orderBy('purchases.created_at', 'desc'),
+            'payment' => $query
+                ->select('purchases.*')
+                ->leftJoin('payment_methods as sort_payment_methods', 'sort_payment_methods.id', '=', 'purchases.payment_method_id')
+                ->leftJoin('credit_cards as sort_credit_cards', 'sort_credit_cards.id', '=', 'purchases.credit_card_id')
+                ->orderByRaw('COALESCE(sort_credit_cards.title, sort_payment_methods.name) ' . $direction)
+                ->orderBy('purchases.created_at', 'desc'),
+            'amount' => $query
+                ->orderBy('purchases.amount', $direction)
+                ->orderBy('purchases.created_at', 'desc'),
+            default => $query->orderBy('purchases.created_at', 'desc'),
+        };
+    }
+
+    private function applySearch($query): void
+    {
+        $term = trim($this->search);
+
+        if ($term === '') {
+            return;
+        }
+
+        $like = '%' . $term . '%';
+        $date = $this->normalizeSearchDate($term);
+        $formattedDate = $this->formattedDateSearch($term);
+        $partialDate = $this->partialDateSearch($term);
+        $amount = $this->normalizeSearchAmount($term);
+        $creditCardTitle = $this->extractCreditCardTitleFromPaymentSearch($term);
+
+        $query->where(function ($searchQuery) use ($like, $date, $formattedDate, $partialDate, $amount, $creditCardTitle) {
+            $searchQuery
+                ->where('purchases.title', 'like', $like)
+                ->orWhere('purchases.purchased_at', 'like', $like)
+                ->orWhereHas('category', function ($categoryQuery) use ($like) {
+                    $categoryQuery->where('description', 'like', $like);
+                })
+                ->orWhereHas('paymentMethod', function ($paymentMethodQuery) use ($like) {
+                    $paymentMethodQuery->where('name', 'like', $like);
+                })
+                ->orWhereHas('creditCard', function ($creditCardQuery) use ($like) {
+                    $creditCardQuery->where('title', 'like', $like);
+                });
+
+            if ($date !== null) {
+                $searchQuery->orWhereDate('purchases.purchased_at', $date);
+            }
+
+            if ($formattedDate !== null) {
+                $this->orWhereFormattedPurchasedAt($searchQuery, $formattedDate);
+            }
+
+            if ($partialDate !== null) {
+                $searchQuery->orWhere(function ($dateQuery) use ($partialDate) {
+                    $dateQuery->whereDay('purchases.purchased_at', $partialDate['day']);
+
+                    if ($partialDate['month'] !== null) {
+                        $dateQuery->whereMonth('purchases.purchased_at', $partialDate['month']);
+                    }
+                });
+            }
+
+            if ($amount !== null) {
+                $searchQuery->orWhere('purchases.amount', 'like', '%' . $amount . '%');
+            }
+
+            if ($creditCardTitle !== null) {
+                $searchQuery->orWhereHas('creditCard', function ($creditCardQuery) use ($creditCardTitle) {
+                    $creditCardQuery->where('title', 'like', '%' . $creditCardTitle . '%');
+                });
+            }
+        });
+    }
+
+    private function normalizeSearchDate(string $term): ?string
+    {
+        $formats = [
+            'd/m/Y' => '/^\d{2}\/\d{2}\/\d{4}$/',
+            'd-m-Y' => '/^\d{2}-\d{2}-\d{4}$/',
+            'Y-m-d' => '/^\d{4}-\d{2}-\d{2}$/',
+        ];
+
+        foreach ($formats as $format => $pattern) {
+            if (! preg_match($pattern, $term)) {
+                continue;
+            }
+
+            $date = Carbon::createFromFormat('!' . $format, $term);
+
+            if ($date !== false && $date->format($format) === $term) {
+                return $date->toDateString();
+            }
+        }
+
+        return null;
+    }
+
+
+    private function formattedDateSearch(string $term): ?string
+    {
+        return preg_match('/^\d{2}\/\d{2}\/\d{4}$/', $term) ? $term : null;
+    }
+
+
+    private function partialDateSearch(string $term): ?array
+    {
+        if (preg_match('/^(\d{1,2})\/(\d{1,2})$/', $term, $matches)) {
+            $day = (int) $matches[1];
+            $month = (int) $matches[2];
+
+            if ($day >= 1 && $day <= 31 && $month >= 1 && $month <= 12) {
+                return ['day' => $day, 'month' => $month];
+            }
+        }
+
+        if (preg_match('/^\d{1,2}$/', $term)) {
+            $day = (int) $term;
+
+            if ($day >= 1 && $day <= 31) {
+                return ['day' => $day, 'month' => null];
+            }
+        }
+
+        return null;
+    }
+
+    private function orWhereFormattedPurchasedAt($query, string $date): void
+    {
+        $driver = $query->getConnection()->getDriverName();
+
+        if ($driver === 'sqlite') {
+            $query->orWhereRaw("strftime('%d/%m/%Y', purchases.purchased_at) = ?", [$date]);
+
+            return;
+        }
+
+        $query->orWhereRaw("DATE_FORMAT(purchases.purchased_at, '%d/%m/%Y') = ?", [$date]);
+    }
+
+    private function normalizeSearchAmount(string $term): ?string
+    {
+        $value = trim(str_replace(['R$', ' '], '', $term));
+
+        if ($value === '') {
+            return null;
+        }
+
+        if (str_contains($value, ',')) {
+            $value = str_replace('.', '', $value);
+            $value = str_replace(',', '.', $value);
+        }
+
+        if (! is_numeric($value)) {
+            return null;
+        }
+
+        return rtrim(rtrim(number_format((float) $value, 2, '.', ''), '0'), '.');
+    }
+
+
+    private function extractCreditCardTitleFromPaymentSearch(string $term): ?string
+    {
+        if (! preg_match('/cr[eé]dito\s*\(([^)]+)\)/iu', $term, $matches)) {
+            return null;
+        }
+
+        $title = trim($matches[1]);
+
+        return $title === '' ? null : $title;
     }
 }
