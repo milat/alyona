@@ -15,6 +15,10 @@
                                 <option value="{{ $option['value'] }}">{{ $option['label'] }}</option>
                             @endforeach
                         </select>
+                        <div class="alyona-loading-indicator align-items-center justify-content-end gap-2 mt-2" wire:loading.flex wire:target="selectedMonth">
+                            <span class="alyona-loading-gif" aria-hidden="true"></span>
+                            <span class="small text-secondary">Carregando...</span>
+                        </div>
                     </div>
                 @endif
             </div>
@@ -210,6 +214,25 @@
     @endif
 
     @once
+
+        <style>
+            .alyona-loading-indicator {
+                display: none;
+            }
+
+            .alyona-loading-gif {
+                width: 1.15rem;
+                height: 1.15rem;
+                border: 0.18rem solid #d6d8db;
+                border-top-color: #0d6efd;
+                border-radius: 50%;
+                animation: alyona-loading-spin 0.65s linear infinite;
+            }
+
+            @keyframes alyona-loading-spin {
+                to { transform: rotate(360deg); }
+            }
+        </style>
         <script>
             function togglePurchaseListPanel(panelId, button) {
                 const panel = document.getElementById(panelId);
