@@ -228,6 +228,124 @@ class PurchasesFlowTest extends TestCase
         $this->travelBack();
     }
 
+    public function test_search_filters_purchases_by_date_title_category_payment_and_amount(): void
+    {
+        $this->travelTo(now()->setDate(2026, 1, 10));
+
+        $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
+        $pharmacy = $this->createCategory($user, true, 'Farmácia');
+        $market = $this->createCategory($user, true, 'Mercado');
+        $pix = PaymentMethod::create(['name' => 'Pix']);
+        $debit = PaymentMethod::create(['name' => 'Débito']);
+
+        Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $pharmacy->id,
+            'payment_method_id' => $pix->id,
+            'title' => 'Remédio infantil',
+            'amount' => 3.42,
+            'purchased_at' => '2026-01-10',
+        ]);
+
+        Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $market->id,
+            'payment_method_id' => $debit->id,
+            'title' => 'Supermercado semanal',
+            'amount' => 250,
+            'purchased_at' => '2026-01-15',
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(Index::class)
+            ->set('selectedMonth', '2026-01')
+            ->set('searchInput', 'Remédio')
+            ->call('applyFilters')
+            ->assertSee('Remédio infantil')
+            ->assertDontSee('Supermercado semanal')
+            ->set('searchInput', 'Farmácia')
+            ->call('applyFilters')
+            ->assertSee('Remédio infantil')
+            ->assertDontSee('Supermercado semanal')
+            ->set('searchInput', 'Pix')
+            ->call('applyFilters')
+            ->assertSee('Remédio infantil')
+            ->assertDontSee('Supermercado semanal')
+            ->set('searchInput', '3,42')
+            ->call('applyFilters')
+            ->assertSee('Remédio infantil')
+            ->assertDontSee('Supermercado semanal')
+            ->set('searchInput', '10/01/2026')
+            ->call('applyFilters')
+            ->assertSee('Remédio infantil')
+            ->assertDontSee('Supermercado semanal')
+            ->set('searchInput', '10/01')
+            ->call('applyFilters')
+            ->assertSee('Remédio infantil')
+            ->assertDontSee('Supermercado semanal')
+            ->set('searchInput', '10')
+            ->call('applyFilters')
+            ->assertSee('Remédio infantil')
+            ->assertDontSee('Supermercado semanal');
+
+        $this->travelBack();
+    }
+
+
+    public function test_sorting_keeps_search_filters_applied(): void
+    {
+        $this->travelTo(now()->setDate(2026, 1, 10));
+
+        $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
+        $category = $this->createCategory($user, true, 'Mercado');
+        $pix = PaymentMethod::create(['name' => 'Pix']);
+
+        Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $category->id,
+            'payment_method_id' => $pix->id,
+            'title' => 'Compra maior',
+            'amount' => 50,
+            'purchased_at' => '2026-01-10',
+        ]);
+
+        Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $category->id,
+            'payment_method_id' => $pix->id,
+            'title' => 'Compra menor',
+            'amount' => 10,
+            'purchased_at' => '2026-01-08',
+        ]);
+
+        Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $category->id,
+            'payment_method_id' => $pix->id,
+            'title' => 'Outro lançamento',
+            'amount' => 1,
+            'purchased_at' => '2026-01-07',
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(Index::class)
+            ->set('selectedMonth', '2026-01')
+            ->set('searchInput', 'Compra')
+            ->call('applyFilters')
+            ->set('sortByInput', 'amount')
+            ->set('sortDirectionInput', 'asc')
+            ->call('applySort')
+            ->assertSeeInOrder(['Compra menor', 'Compra maior'])
+            ->assertDontSee('Outro lançamento');
+
+        $this->travelBack();
+    }
+
     private function createUserInHousehold(string $budgetPeriodType): User
     {
         $user = User::factory()->create();
