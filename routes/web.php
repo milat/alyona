@@ -24,6 +24,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/credit-cards/{creditCard}/edit', function (CreditCard $creditCard) {
         return view('credit-cards.edit', compact('creditCard'));
     })->name('credit-cards.edit');
+    Route::view('/reports/purchases', 'reports.purchases')->name('reports.purchases');
     Route::view('/purchases', 'purchases.index')->name('purchases.index');
     Route::get('/purchases/{purchase}/edit', function (App\Models\Purchase $purchase) {
         return view('purchases.edit', compact('purchase'));

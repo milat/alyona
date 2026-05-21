@@ -16,6 +16,7 @@ class Purchase extends Model
         'category_id',
         'payment_method_id',
         'credit_card_id',
+        'purchase_group_id',
         'title',
         'description',
         'amount',
@@ -71,5 +72,10 @@ class Purchase extends Model
     public function creditCard(): BelongsTo
     {
         return $this->belongsTo(CreditCard::class);
+    }
+
+    public function purchaseGroup(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseGroup::class);
     }
 }

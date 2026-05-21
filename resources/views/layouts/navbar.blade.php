@@ -35,6 +35,11 @@
                             <i class="bi bi-credit-card me-1"></i>Cartões
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" aria-current="page" href="{{ route('reports.purchases') }}" wire:navigate>
+                            <i class="bi bi-file-earmark-text me-1"></i>Relatório
+                        </a>
+                    </li>
                 </ul>
             @endauth
             <ul class="navbar-nav justify-content-end flex-grow-1 pe-3">

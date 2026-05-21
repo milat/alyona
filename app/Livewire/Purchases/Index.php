@@ -4,6 +4,7 @@ namespace App\Livewire\Purchases;
 
 use App\Models\Category;
 use App\Models\Purchase;
+use App\Models\PurchaseGroup;
 use App\Support\BudgetPeriod;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -32,6 +33,10 @@ class Index extends Component
     public bool $showSearch = false;
 
     public bool $showSort = false;
+
+    public bool $showGrouping = false;
+
+    public array $selectedPurchaseIds = [];
 
     public string $sortBy = 'date';
 
@@ -84,6 +89,95 @@ class Index extends Component
         $this->showSort = ! $this->showSort;
     }
 
+    public function groupSelectedPurchases(): void
+    {
+        $user = auth()->user();
+
+        if (! $user || $user->household_id === null) {
+            return;
+        }
+
+        $ids = $this->selectedPurchaseIds();
+
+        if (count($ids) < 2) {
+            $this->showGrouping = true;
+            $this->addError('selectedPurchaseIds', 'Selecione pelo menos duas compras para agrupar.');
+            return;
+        }
+
+        $purchases = Purchase::query()
+            ->where('household_id', $user->household_id)
+            ->whereIn('id', $ids)
+            ->get(['id', 'purchase_group_id']);
+
+        if ($purchases->count() !== count($ids)) {
+            $this->showGrouping = true;
+            $this->addError('selectedPurchaseIds', 'Selecione apenas compras válidas deste grupo.');
+            return;
+        }
+
+        if ($purchases->contains(fn (Purchase $purchase) => $purchase->purchase_group_id !== null)) {
+            $this->showGrouping = true;
+            $this->addError('selectedPurchaseIds', 'Uma ou mais compras selecionadas já estão agrupadas.');
+            return;
+        }
+
+        $group = PurchaseGroup::create([
+            'household_id' => $user->household_id,
+        ]);
+
+        Purchase::query()
+            ->where('household_id', $user->household_id)
+            ->whereIn('id', $ids)
+            ->update(['purchase_group_id' => $group->id]);
+
+        $this->selectedPurchaseIds = [];
+        $this->showGrouping = false;
+        session()->flash('success', 'Compras agrupadas com sucesso.');
+    }
+
+    public function ungroupSelectedPurchases(): void
+    {
+        $user = auth()->user();
+
+        if (! $user || $user->household_id === null) {
+            return;
+        }
+
+        $ids = $this->selectedPurchaseIds();
+
+        if ($ids === []) {
+            $this->showGrouping = true;
+            $this->addError('selectedPurchaseIds', 'Selecione ao menos uma compra para desagrupar.');
+            return;
+        }
+
+        $groupIds = Purchase::query()
+            ->where('household_id', $user->household_id)
+            ->whereIn('id', $ids)
+            ->whereNotNull('purchase_group_id')
+            ->pluck('purchase_group_id')
+            ->unique()
+            ->values();
+
+        if ($groupIds->isEmpty()) {
+            $this->showGrouping = true;
+            $this->addError('selectedPurchaseIds', 'As compras selecionadas não estão agrupadas.');
+            return;
+        }
+
+        Purchase::query()
+            ->where('household_id', $user->household_id)
+            ->whereIn('id', $ids)
+            ->update(['purchase_group_id' => null]);
+
+        $this->deleteEmptyPurchaseGroups($user->household_id, $groupIds);
+
+        $this->selectedPurchaseIds = [];
+        $this->showGrouping = false;
+        session()->flash('success', 'Agrupamento removido com sucesso.');
+    }
+
     public function applyFilters(): void
     {
         $this->selectedCategoryId = $this->categoryFilterInput ?: null;
@@ -130,6 +224,12 @@ class Index extends Component
         $monthOptions = collect();
         $categoryOptions = collect();
         $filteredTotal = 0;
+        $groupTotals = collect();
+        $groupingState = [
+            'mode' => null,
+            'canGroup' => false,
+            'canUngroup' => false,
+        ];
 
         if ($user && $user->household_id !== null) {
             $household = $user->household;
@@ -214,6 +314,8 @@ class Index extends Component
             $filteredTotal = (float) (clone $query)->sum('purchases.amount');
             $this->applySorting($query);
             $purchases = $query->paginate(100)->withQueryString();
+            $groupTotals = $this->groupTotalsFor($purchases->getCollection());
+            $groupingState = $this->groupingStateFor($purchases->getCollection());
 
             if ($purchases->isEmpty() && $this->hasActiveFilters()) {
                 $this->showSearch = true;
@@ -225,7 +327,77 @@ class Index extends Component
             'monthOptions' => $monthOptions,
             'categoryOptions' => $categoryOptions,
             'filteredTotal' => $filteredTotal,
+            'groupTotals' => $groupTotals,
+            'groupingState' => $groupingState,
         ]);
+    }
+
+
+    private function selectedPurchaseIds(): array
+    {
+        return collect($this->selectedPurchaseIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+
+    private function groupingStateFor(Collection $purchases): array
+    {
+        $selectedIds = $this->selectedPurchaseIds();
+
+        if ($selectedIds === []) {
+            return [
+                'mode' => null,
+                'canGroup' => false,
+                'canUngroup' => false,
+            ];
+        }
+
+        $selectedPurchases = $purchases->whereIn('id', $selectedIds);
+        $groupedCount = $selectedPurchases->filter(fn (Purchase $purchase) => $purchase->purchase_group_id !== null)->count();
+        $ungroupedCount = $selectedPurchases->filter(fn (Purchase $purchase) => $purchase->purchase_group_id === null)->count();
+        $mode = $groupedCount > 0 ? 'grouped' : 'ungrouped';
+
+        return [
+            'mode' => $mode,
+            'canGroup' => $mode === 'ungrouped' && $ungroupedCount >= 2,
+            'canUngroup' => $mode === 'grouped' && $groupedCount >= 1,
+        ];
+    }
+
+    private function groupTotalsFor(Collection $purchases): Collection
+    {
+        $groupIds = $purchases
+            ->pluck('purchase_group_id')
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($groupIds->isEmpty()) {
+            return collect();
+        }
+
+        return Purchase::query()
+            ->selectRaw('purchase_group_id, SUM(amount) as total')
+            ->whereIn('purchase_group_id', $groupIds)
+            ->groupBy('purchase_group_id')
+            ->pluck('total', 'purchase_group_id');
+    }
+
+    private function deleteEmptyPurchaseGroups(int $householdId, Collection $groupIds): void
+    {
+        $remainingGroupIds = Purchase::query()
+            ->whereIn('purchase_group_id', $groupIds)
+            ->pluck('purchase_group_id')
+            ->unique();
+
+        PurchaseGroup::query()
+            ->where('household_id', $householdId)
+            ->whereIn('id', $groupIds->diff($remainingGroupIds))
+            ->delete();
     }
 
     private function buildMonthOptions($household): Collection

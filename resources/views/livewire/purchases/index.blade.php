@@ -38,6 +38,15 @@
                         </button>
                         <button
                             type="button"
+                            class="btn btn-sm btn-outline-dark"
+                            onclick="togglePurchaseGroupingPanel(this)"
+                            aria-label="Agrupar compras"
+                            aria-expanded="{{ $showGrouping ? 'true' : 'false' }}"
+                        >
+                            <i class="bi bi-diagram-3"></i>
+                        </button>
+                        <button
+                            type="button"
                             class="btn btn-sm {{ ($sortBy !== 'date' || $sortDirection !== 'desc') ? 'btn-primary' : 'btn-outline-dark' }}"
                             onclick="togglePurchaseListPanel('purchase-sort-panel', this)"
                             aria-label="Ordenar compras"
@@ -48,6 +57,20 @@
                     </div>
                     <div class="text-end">
                         <strong>Total:</strong> R$ {{ number_format($filteredTotal, 2, ',', '.') }}
+                    </div>
+                </div>
+
+                <div id="purchase-grouping-panel" class="mt-2" style="display: {{ $showGrouping ? 'block' : 'none' }};">
+                    @error('selectedPurchaseIds')
+                        <div class="alert alert-danger py-2 mb-2">{{ $message }}</div>
+                    @enderror
+                    <div class="d-flex justify-content-end gap-2">
+                        @if ($groupingState['canGroup'])
+                            <button type="button" class="btn btn-dark btn-sm" wire:click="groupSelectedPurchases">Agrupar</button>
+                        @endif
+                        @if ($groupingState['canUngroup'])
+                            <button type="button" class="btn btn-outline-dark btn-sm" wire:click="ungroupSelectedPurchases">Desagrupar</button>
+                        @endif
                     </div>
                 </div>
 
@@ -121,6 +144,7 @@
                 <table class="table table-striped align-middle">
                     <thead>
                         <tr>
+                            <th class="purchase-grouping-cell" style="display: {{ $showGrouping ? 'table-cell' : 'none' }}; width: 1%;"></th>
                             <th>Data</th>
                             <th>Título</th>
                             <th>Categoria</th>
@@ -132,6 +156,22 @@
                     <tbody>
                         @foreach ($purchases as $purchase)
                             <tr>
+                                <td class="purchase-grouping-cell" style="display: {{ $showGrouping ? 'table-cell' : 'none' }};">
+                                    @php
+                                        $groupingMode = $groupingState['mode'];
+                                        $isGroupedPurchase = $purchase->purchase_group_id !== null;
+                                        $disableGroupingCheckbox = ($groupingMode === 'grouped' && ! $isGroupedPurchase)
+                                            || ($groupingMode === 'ungrouped' && $isGroupedPurchase);
+                                    @endphp
+                                    <input
+                                        type="checkbox"
+                                        class="form-check-input"
+                                        value="{{ $purchase->id }}"
+                                        wire:model.live="selectedPurchaseIds"
+                                        aria-label="Selecionar compra {{ $purchase->title }}"
+                                        @disabled($disableGroupingCheckbox)
+                                    >
+                                </td>
                                 <td>
                                     {{ $purchase->purchased_at->format('d/m/Y') }}
                                     <div class="small text-secondary">{{ $purchase->user?->name ?? '-' }}</div>
@@ -166,7 +206,14 @@
                                         {{ $purchase->paymentMethod?->name }}
                                     @endif
                                 </td>
-                                <td class="text-end text-nowrap">R$ {{ number_format($purchase->amount, 2, ',', '.') }}</td>
+                                <td class="text-end text-nowrap">
+                                    R$ {{ number_format($purchase->amount, 2, ',', '.') }}
+                                    @if ($purchase->purchase_group_id)
+                                        <div class="text-secondary" style="font-size: 0.68rem;">
+                                            AGRP {{ $purchase->purchase_group_id }}: R$ {{ number_format((float) ($groupTotals[$purchase->purchase_group_id] ?? 0), 2, ',', '.') }}
+                                        </div>
+                                    @endif
+                                </td>
                                 <td class="text-end">
                                     <div class="d-inline-flex align-items-center gap-1 flex-nowrap">
                                         <a
@@ -256,6 +303,36 @@
                 if (button) {
                     button.setAttribute('aria-expanded', shouldShow ? 'true' : 'false');
                 }
+
+                return shouldShow;
+            }
+
+
+            function togglePurchaseGroupingPanel(button) {
+                const panel = document.getElementById('purchase-grouping-panel');
+
+                if (!panel) {
+                    return;
+                }
+
+                const shouldShow = panel.style.display === 'none' || panel.style.display === '';
+                panel.style.display = shouldShow ? 'block' : 'none';
+                document.querySelectorAll('.purchase-grouping-cell').forEach((cell) => {
+                    cell.style.display = shouldShow ? 'table-cell' : 'none';
+                });
+
+                if (button) {
+                    button.setAttribute('aria-expanded', shouldShow ? 'true' : 'false');
+                }
+
+                const componentRoot = button ? button.closest('[wire\\:id]') : null;
+                const componentId = componentRoot ? componentRoot.getAttribute('wire:id') : null;
+
+                if (componentId && window.Livewire) {
+                    window.Livewire.find(componentId).set('showGrouping', shouldShow);
+                }
+
+                return shouldShow;
             }
         </script>
     @endonce
