@@ -59,24 +59,39 @@ class PurchasesReport extends Component
 
             if ($this->generated) {
                 $query = Purchase::query()
-                    ->with(['category', 'paymentMethod', 'creditCard', 'user'])
+                    ->with(['category', 'categoryAllocations.category', 'paymentMethod', 'creditCard', 'user'])
                     ->where('household_id', $user->household_id)
                     ->whereBetween('reference_date', [
                         Carbon::parse($this->dateFrom)->toDateString(),
                         Carbon::parse($this->dateTo)->toDateString(),
                     ]);
 
-                if ($this->selectedCategories !== []) {
-                    $query->whereIn('category_id', array_map('intval', $this->selectedCategories));
+                $selectedCategoryIds = array_map('intval', $this->selectedCategories);
+
+                if ($selectedCategoryIds !== []) {
+                    $query->where(function ($categoryQuery) use ($selectedCategoryIds) {
+                        $categoryQuery->whereIn('category_id', $selectedCategoryIds)
+                            ->orWhereHas('categoryAllocations', fn ($allocationQuery) => $allocationQuery->whereIn('category_id', $selectedCategoryIds));
+                    });
                 }
 
                 $this->applyPaymentFilter($query);
 
-                $total = (float) (clone $query)->sum('amount');
                 $purchases = $query
                     ->orderByDesc('purchased_at')
                     ->orderByDesc('created_at')
-                    ->get();
+                    ->get()
+                    ->map(function (Purchase $purchase) use ($selectedCategoryIds) {
+                        $amount = $selectedCategoryIds === []
+                            ? (float) $purchase->amount
+                            : $this->filteredCategoryAmount($purchase, $selectedCategoryIds);
+
+                        $purchase->setAttribute('report_amount', $amount);
+
+                        return $purchase;
+                    });
+
+                $total = (float) $purchases->sum('report_amount');
             }
         }
 
@@ -86,6 +101,23 @@ class PurchasesReport extends Component
             'purchases' => $purchases,
             'total' => $total,
         ]);
+    }
+
+    private function filteredCategoryAmount(Purchase $purchase, array $selectedCategoryIds): float
+    {
+        $amount = 0.0;
+
+        if (in_array((int) $purchase->category_id, $selectedCategoryIds, true)) {
+            $amount += (float) $purchase->primaryCategoryAmount();
+        }
+
+        foreach ($purchase->categoryAllocations as $allocation) {
+            if (in_array((int) $allocation->category_id, $selectedCategoryIds, true)) {
+                $amount += (float) $allocation->amount;
+            }
+        }
+
+        return $amount;
     }
 
     private function paymentOptions(int $householdId): Collection

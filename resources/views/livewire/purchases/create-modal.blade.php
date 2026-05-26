@@ -29,6 +29,16 @@
                                             <div class="{{ $remainingClass }}">Restante: R$ {{ number_format($remaining, 2, ',', '.') }}</div>
                                         @endif
                                     </dd>
+                                    @if (collect($subcategories)->filter(fn ($item) => ! empty($item['category_id']))->isNotEmpty())
+                                        <dt class="col-5">Subcategorias</dt>
+                                        <dd class="col-7">
+                                            @foreach ($subcategories as $subcategory)
+                                                @if (! empty($subcategory['category_id']))
+                                                    <div>{{ optional($categories->firstWhere('id', (int) $subcategory['category_id']))->description }}: R$ {{ number_format((float) str_replace(',', '.', str_replace('.', '', $subcategory['amount'] ?? '0')), 2, ',', '.') }}</div>
+                                                @endif
+                                            @endforeach
+                                        </dd>
+                                    @endif
                                     <dt class="col-5">Pagamento</dt>
                                     <dd class="col-7">
                                         @if ($credit_card_id)
@@ -89,12 +99,17 @@
                                         @foreach ($categories as $category)
                                             @php
                                                 $remaining = $remainingByCategory[$category->id] ?? null;
+                                                $isCategoryUsedAsSubcategory = collect($subcategories)
+                                                    ->pluck('category_id')
+                                                    ->map(fn ($id) => (int) $id)
+                                                    ->contains($category->id);
                                             @endphp
                                             <li>
                                                 <button
                                                     type="button"
                                                     class="dropdown-item d-flex justify-content-between align-items-start gap-2"
                                                     wire:click="$set('category_id', {{ $category->id }})"
+                                                    @disabled($isCategoryUsedAsSubcategory)
                                                 >
                                                     <span class="d-inline-flex align-items-center">
                                                         <span class="d-inline-block rounded-circle me-2" style="width: 10px; height: 10px; background: {{ $category->color }}; border: 1px solid #dee2e6;"></span>
@@ -200,6 +215,49 @@
                                         </div>
                                     </div>
                                 @endif
+                            </div>
+
+                            <div class="mb-3">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label class="form-label mb-0">Subcategorias</label>
+                                    <button type="button" class="btn btn-outline-dark btn-sm" wire:click="addSubcategory">Adicionar</button>
+                                </div>
+                                @error('subcategories')
+                                    <div class="text-danger mt-2">{{ $message }}</div>
+                                @enderror
+                                @foreach ($subcategories as $index => $subcategory)
+                                    <div class="row g-2 align-items-start mb-2">
+                                        <div class="col-6">
+                                            <select class="form-select" wire:model.live="subcategories.{{ $index }}.category_id">
+                                                <option value="">Subcategoria</option>
+                                                @foreach ($categories as $category)
+                                                    @php
+                                                        $selectedSubcategoryIds = collect($subcategories)
+                                                            ->except($index)
+                                                            ->pluck('category_id')
+                                                            ->map(fn ($id) => (int) $id);
+                                                        $isCategoryUnavailable = $category->id === (int) $category_id || $selectedSubcategoryIds->contains($category->id);
+                                                    @endphp
+                                                    <option value="{{ $category->id }}" @disabled($isCategoryUnavailable)>{{ $category->description }}</option>
+                                                @endforeach
+                                            </select>
+                                            @error('subcategories.' . $index . '.category_id')
+                                                <div class="text-danger small mt-1">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                        <div class="col-4">
+                                            <input type="text" inputmode="numeric" class="form-control" placeholder="0,00" wire:model.defer="subcategories.{{ $index }}.amount" oninput="maskHomePurchaseAmount(this)">
+                                            @error('subcategories.' . $index . '.amount')
+                                                <div class="text-danger small mt-1">{{ $message }}</div>
+                                            @enderror
+                                        </div>
+                                        <div class="col-2">
+                                            <button type="button" class="btn btn-outline-danger w-100" wire:click="removeSubcategory({{ $index }})" aria-label="Remover subcategoria">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                @endforeach
                             </div>
 
                             <div class="mb-3">

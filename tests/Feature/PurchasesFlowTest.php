@@ -10,7 +10,7 @@ use App\Models\CreditCard;
 use App\Models\Household;
 use App\Models\PaymentMethod;
 use App\Models\Purchase;
-use App\Models\PurchaseGroup;
+use App\Models\PurchaseCategoryAllocation;
 use App\Models\User;
 use App\Support\BudgetPeriod;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -460,172 +460,153 @@ class PurchasesFlowTest extends TestCase
     }
 
 
-    public function test_user_can_group_and_ungroup_purchases(): void
+
+    public function test_purchase_list_uses_modals_for_category_allocations_and_credit_card_details(): void
     {
         $this->travelTo(now()->setDate(2026, 1, 10));
 
         $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
-        $category = $this->createCategory($user, true, 'Mercado');
-        $debit = PaymentMethod::create(['name' => 'Débito']);
+        $mainCategory = $this->createCategory($user, true, 'Mercado');
+        $subCategory = $this->createCategory($user, true, 'Farmácia');
+        $credit = PaymentMethod::create(['name' => 'Crédito']);
+        $creditCard = CreditCard::create([
+            'household_id' => $user->household_id,
+            'title' => 'Nubank',
+            'closing_day' => 10,
+            'is_active' => true,
+        ]);
 
-        $firstPurchase = Purchase::create([
+        $purchase = Purchase::create([
             'household_id' => $user->household_id,
             'user_id' => $user->id,
-            'category_id' => $category->id,
-            'payment_method_id' => $debit->id,
-            'title' => 'Compra 1',
-            'amount' => 40,
+            'category_id' => $mainCategory->id,
+            'payment_method_id' => $credit->id,
+            'credit_card_id' => $creditCard->id,
+            'title' => 'Compra dividida no crédito',
+            'amount' => 100,
             'purchased_at' => '2026-01-10',
             'reference_date' => '2026-01-01',
         ]);
 
-        $secondPurchase = Purchase::create([
-            'household_id' => $user->household_id,
-            'user_id' => $user->id,
-            'category_id' => $category->id,
-            'payment_method_id' => $debit->id,
-            'title' => 'Compra 2',
-            'amount' => 60,
-            'purchased_at' => '2026-01-10',
-            'reference_date' => '2026-01-01',
-        ]);
-
-        Livewire::actingAs($user)
-            ->test(Index::class)
-            ->set('selectedMonth', '2026-01')
-            ->set('selectedPurchaseIds', [(string) $firstPurchase->id, (string) $secondPurchase->id])
-            ->call('groupSelectedPurchases')
-            ->assertHasNoErrors()
-            ->assertSee('AGRP')
-            ->assertSee('R$ 100,00');
-
-        $firstPurchase->refresh();
-        $secondPurchase->refresh();
-
-        $this->assertNotNull($firstPurchase->purchase_group_id);
-        $this->assertSame($firstPurchase->purchase_group_id, $secondPurchase->purchase_group_id);
-
-        Livewire::actingAs($user)
-            ->test(Index::class)
-            ->set('selectedMonth', '2026-01')
-            ->set('selectedPurchaseIds', [(string) $firstPurchase->id, (string) $secondPurchase->id])
-            ->call('ungroupSelectedPurchases')
-            ->assertHasNoErrors();
-
-        $this->assertNull($firstPurchase->refresh()->purchase_group_id);
-        $this->assertNull($secondPurchase->refresh()->purchase_group_id);
-        $this->assertSame(0, PurchaseGroup::query()->count());
-
-        $this->travelBack();
-    }
-
-
-    public function test_grouping_buttons_follow_selected_purchase_type(): void
-    {
-        $this->travelTo(now()->setDate(2026, 1, 10));
-
-        $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
-        $category = $this->createCategory($user, true, 'Mercado');
-        $debit = PaymentMethod::create(['name' => 'Débito']);
-        $group = PurchaseGroup::create(['household_id' => $user->household_id]);
-
-        $groupedPurchase = Purchase::create([
-            'household_id' => $user->household_id,
-            'user_id' => $user->id,
-            'category_id' => $category->id,
-            'payment_method_id' => $debit->id,
-            'purchase_group_id' => $group->id,
-            'title' => 'Compra agrupada',
-            'amount' => 40,
-            'purchased_at' => '2026-01-10',
-            'reference_date' => '2026-01-01',
-        ]);
-
-        $firstUngroupedPurchase = Purchase::create([
-            'household_id' => $user->household_id,
-            'user_id' => $user->id,
-            'category_id' => $category->id,
-            'payment_method_id' => $debit->id,
-            'title' => 'Compra livre 1',
-            'amount' => 60,
-            'purchased_at' => '2026-01-10',
-            'reference_date' => '2026-01-01',
-        ]);
-
-        $secondUngroupedPurchase = Purchase::create([
-            'household_id' => $user->household_id,
-            'user_id' => $user->id,
-            'category_id' => $category->id,
-            'payment_method_id' => $debit->id,
-            'title' => 'Compra livre 2',
+        PurchaseCategoryAllocation::create([
+            'purchase_id' => $purchase->id,
+            'category_id' => $subCategory->id,
             'amount' => 30,
-            'purchased_at' => '2026-01-10',
-            'reference_date' => '2026-01-01',
         ]);
 
         Livewire::actingAs($user)
             ->test(Index::class)
             ->set('selectedMonth', '2026-01')
-            ->set('selectedPurchaseIds', [(string) $groupedPurchase->id])
-            ->assertSee('Desagrupar')
-            ->assertDontSee('Agrupar</button>', false);
-
-        Livewire::actingAs($user)
-            ->test(Index::class)
-            ->set('selectedMonth', '2026-01')
-            ->set('selectedPurchaseIds', [(string) $firstUngroupedPurchase->id])
-            ->assertDontSee('Agrupar</button>', false)
-            ->assertDontSee('Desagrupar')
-            ->set('selectedPurchaseIds', [(string) $firstUngroupedPurchase->id, (string) $secondUngroupedPurchase->id])
-            ->assertSee('Agrupar')
-            ->assertDontSee('Desagrupar');
+            ->assertSee('purchase-categories-' . $purchase->id, false)
+            ->assertSee('Valores por categoria')
+            ->assertSee('R$ 70,00')
+            ->assertSee('R$ 30,00')
+            ->assertSee('Crédito')
+            ->assertDontSee('purchase-card-' . $purchase->id, false)
+            ->assertDontSee('Cartão utilizado')
+            ->assertDontSee('Crédito (Nubank)');
 
         $this->travelBack();
     }
 
-    public function test_purchase_already_in_group_cannot_be_grouped_again(): void
+    public function test_create_purchase_with_subcategories_allocates_category_values(): void
     {
-        $this->travelTo(now()->setDate(2026, 1, 10));
-
         $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
-        $category = $this->createCategory($user, true, 'Mercado');
+        $mainCategory = $this->createCategory($user, true, 'Mercado');
+        $subCategory = $this->createCategory($user, true, 'Farmácia');
         $debit = PaymentMethod::create(['name' => 'Débito']);
-        $group = PurchaseGroup::create(['household_id' => $user->household_id]);
 
-        $groupedPurchase = Purchase::create([
+        Livewire::actingAs($user)
+            ->test(CreateModal::class)
+            ->set('title', 'Compra dividida')
+            ->set('category_id', $mainCategory->id)
+            ->set('payment_option', 'method:' . $debit->id)
+            ->set('amount', '100,00')
+            ->set('purchased_at', '2026-01-10')
+            ->set('subcategories', [[
+                'category_id' => $subCategory->id,
+                'amount' => '30,00',
+            ]])
+            ->call('save');
+
+        $purchase = Purchase::query()->where('title', 'Compra dividida')->firstOrFail();
+
+        $this->assertSame('100.00', $purchase->amount);
+        $this->assertSame('70.00', number_format($purchase->primaryCategoryAmount(), 2, '.', ''));
+        $this->assertDatabaseHas('purchase_category_allocations', [
+            'purchase_id' => $purchase->id,
+            'category_id' => $subCategory->id,
+            'amount' => 30.00,
+        ]);
+    }
+
+    public function test_purchase_rejects_repeated_subcategory_or_main_category_as_subcategory(): void
+    {
+        $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
+        $mainCategory = $this->createCategory($user, true, 'Mercado');
+        $debit = PaymentMethod::create(['name' => 'Débito']);
+
+        Livewire::actingAs($user)
+            ->test(CreateModal::class)
+            ->set('title', 'Compra inválida')
+            ->set('category_id', $mainCategory->id)
+            ->set('payment_option', 'method:' . $debit->id)
+            ->set('amount', '100,00')
+            ->set('purchased_at', '2026-01-10')
+            ->set('subcategories', [[
+                'category_id' => $mainCategory->id,
+                'amount' => '30,00',
+            ]])
+            ->call('save')
+            ->assertHasErrors(['subcategories.0.category_id']);
+    }
+
+    public function test_edit_purchase_updates_subcategories(): void
+    {
+        $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
+        $mainCategory = $this->createCategory($user, true, 'Mercado');
+        $oldSubCategory = $this->createCategory($user, true, 'Farmácia');
+        $newSubCategory = $this->createCategory($user, true, 'Lazer');
+        $debit = PaymentMethod::create(['name' => 'Débito']);
+
+        $purchase = Purchase::create([
             'household_id' => $user->household_id,
             'user_id' => $user->id,
-            'category_id' => $category->id,
+            'category_id' => $mainCategory->id,
             'payment_method_id' => $debit->id,
-            'purchase_group_id' => $group->id,
-            'title' => 'Compra agrupada',
-            'amount' => 40,
+            'title' => 'Compra editável',
+            'amount' => 100,
             'purchased_at' => '2026-01-10',
-            'reference_date' => '2026-01-01',
         ]);
 
-        $newPurchase = Purchase::create([
-            'household_id' => $user->household_id,
-            'user_id' => $user->id,
-            'category_id' => $category->id,
-            'payment_method_id' => $debit->id,
-            'title' => 'Compra nova',
-            'amount' => 60,
-            'purchased_at' => '2026-01-10',
-            'reference_date' => '2026-01-01',
+        PurchaseCategoryAllocation::create([
+            'purchase_id' => $purchase->id,
+            'category_id' => $oldSubCategory->id,
+            'amount' => 20,
         ]);
 
         Livewire::actingAs($user)
-            ->test(Index::class)
-            ->set('selectedMonth', '2026-01')
-            ->set('selectedPurchaseIds', [(string) $groupedPurchase->id, (string) $newPurchase->id])
-            ->call('groupSelectedPurchases')
-            ->assertHasErrors(['selectedPurchaseIds']);
+            ->test(EditForm::class, ['purchaseId' => $purchase->id])
+            ->set('title', 'Compra editada')
+            ->set('category_id', $mainCategory->id)
+            ->set('payment_option', 'method:' . $debit->id)
+            ->set('amount', '100,00')
+            ->set('purchased_at', '2026-01-10')
+            ->set('subcategories', [[
+                'category_id' => $newSubCategory->id,
+                'amount' => '40,00',
+            ]])
+            ->call('save');
 
-        $this->assertNull($newPurchase->refresh()->purchase_group_id);
-        $this->assertSame(1, PurchaseGroup::query()->count());
-
-        $this->travelBack();
+        $this->assertDatabaseMissing('purchase_category_allocations', [
+            'purchase_id' => $purchase->id,
+            'category_id' => $oldSubCategory->id,
+        ]);
+        $this->assertDatabaseHas('purchase_category_allocations', [
+            'purchase_id' => $purchase->id,
+            'category_id' => $newSubCategory->id,
+            'amount' => 40.00,
+        ]);
     }
 
     private function createUserInHousehold(string $budgetPeriodType): User

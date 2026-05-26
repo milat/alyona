@@ -8,6 +8,7 @@ use App\Models\CategoryBudget;
 use App\Models\Household;
 use App\Models\PaymentMethod;
 use App\Models\Purchase;
+use App\Models\PurchaseCategoryAllocation;
 use App\Models\User;
 use App\Support\BudgetPeriod;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -104,6 +105,64 @@ class DashboardPeriodSummaryTest extends TestCase
             ->test(PeriodSummary::class)
             ->set('selectedMonth', '2026-03')
             ->assertSee('R$ 300,00');
+    }
+
+
+    public function test_dashboard_splits_purchase_amount_between_main_category_and_subcategories(): void
+    {
+        $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
+        $mainCategory = Category::create([
+            'household_id' => $user->household_id,
+            'description' => 'Mercado',
+            'color' => '#FFFFFF',
+            'is_active' => true,
+        ]);
+        $subCategory = Category::create([
+            'household_id' => $user->household_id,
+            'description' => 'Farmácia',
+            'color' => '#FFFFFF',
+            'is_active' => true,
+        ]);
+        $secondSubCategory = Category::create([
+            'household_id' => $user->household_id,
+            'description' => 'Lazer',
+            'color' => '#FFFFFF',
+            'is_active' => true,
+        ]);
+        $payment = PaymentMethod::create(['name' => 'Pix']);
+
+        $purchase = Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $mainCategory->id,
+            'payment_method_id' => $payment->id,
+            'title' => 'Compra dividida',
+            'amount' => 100,
+            'purchased_at' => '2026-01-15',
+            'reference_date' => '2026-01-01',
+        ]);
+
+        PurchaseCategoryAllocation::create([
+            'purchase_id' => $purchase->id,
+            'category_id' => $subCategory->id,
+            'amount' => 30,
+        ]);
+
+        PurchaseCategoryAllocation::create([
+            'purchase_id' => $purchase->id,
+            'category_id' => $secondSubCategory->id,
+            'amount' => 20,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(PeriodSummary::class)
+            ->set('selectedMonth', '2026-01')
+            ->assertSee('Mercado')
+            ->assertSee('R$ 50,00')
+            ->assertSee('Farmácia')
+            ->assertSee('R$ 30,00')
+            ->assertSee('Lazer')
+            ->assertSee('R$ 20,00');
     }
 
     private function createUserInHousehold(string $budgetPeriodType): User
