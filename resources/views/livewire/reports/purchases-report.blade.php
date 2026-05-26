@@ -121,21 +121,46 @@
                                     </td>
                                     <td>
                                         @if ($purchase->category)
-                                            <span class="badge" style="background: {{ $purchase->category->color }}; color: #000;">
-                                                {{ $purchase->category->description }}
-                                            </span>
+                                            @php
+                                                $hasSubcategories = $purchase->categoryAllocations->isNotEmpty();
+                                            @endphp
+                                            <div class="d-inline-flex align-items-start">
+                                                <span class="badge" style="background: {{ $purchase->category->color }}; color: #000;">
+                                                    {{ $purchase->category->description }}
+                                                </span>
+                                                @if ($hasSubcategories)
+                                                    <button
+                                                        type="button"
+                                                        class="btn btn-link btn-sm p-0 ms-1 flex-shrink-0 align-baseline"
+                                                        data-bs-toggle="modal"
+                                                        data-bs-target="#report-purchase-categories-{{ $purchase->id }}"
+                                                        aria-label="Ver valores por categoria"
+                                                    >
+                                                        <i class="bi bi-question-circle"></i>
+                                                    </button>
+                                                @endif
+                                            </div>
+                                            @if ($hasSubcategories)
+                                                @foreach ($purchase->categoryAllocations as $allocation)
+                                                    <div class="mt-1">
+                                                        <span class="badge" style="background: {{ $allocation->category?->color ?? '#e9ecef' }}; color: #000;">
+                                                            {{ $allocation->category?->description ?? '-' }}
+                                                        </span>
+                                                    </div>
+                                                @endforeach
+                                            @endif
                                         @else
                                             <span class="text-secondary">--</span>
                                         @endif
                                     </td>
                                     <td>
                                         @if ($purchase->creditCard)
-                                            Crédito ({{ $purchase->creditCard->title }})
+                                            Crédito
                                         @else
                                             {{ $purchase->paymentMethod?->name }}
                                         @endif
                                     </td>
-                                    <td class="text-end text-nowrap">R$ {{ number_format($purchase->amount, 2, ',', '.') }}</td>
+                                    <td class="text-end text-nowrap">R$ {{ number_format((float) ($purchase->report_amount ?? $purchase->amount), 2, ',', '.') }}</td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -153,6 +178,39 @@
                                     </div>
                                     <div class="modal-body">
                                         <p class="mb-0">{{ $purchase->description }}</p>
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-outline-dark" data-bs-dismiss="modal">Fechar</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
+                    @if ($purchase->categoryAllocations->isNotEmpty())
+                        <div class="modal fade" id="report-purchase-categories-{{ $purchase->id }}" tabindex="-1" aria-hidden="true" wire:ignore.self>
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Valores por categoria</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        <div class="d-flex justify-content-between gap-3 mb-2">
+                                            <span>{{ $purchase->category?->description ?? '-' }}</span>
+                                            <strong>R$ {{ number_format($purchase->primaryCategoryAmount(), 2, ',', '.') }}</strong>
+                                        </div>
+                                        @foreach ($purchase->categoryAllocations as $allocation)
+                                            <div class="d-flex justify-content-between gap-3 mb-2">
+                                                <span>{{ $allocation->category?->description ?? '-' }}</span>
+                                                <strong>R$ {{ number_format((float) $allocation->amount, 2, ',', '.') }}</strong>
+                                            </div>
+                                        @endforeach
+                                        <hr>
+                                        <div class="d-flex justify-content-between gap-3 mb-0">
+                                            <span>Total</span>
+                                            <strong>R$ {{ number_format((float) $purchase->amount, 2, ',', '.') }}</strong>
+                                        </div>
                                     </div>
                                     <div class="modal-footer">
                                         <button type="button" class="btn btn-outline-dark" data-bs-dismiss="modal">Fechar</button>

@@ -8,6 +8,7 @@ use App\Models\Purchase;
 use App\Support\BudgetPeriod;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\On;
 use Livewire\Component;
 
@@ -91,12 +92,7 @@ class PeriodSummary extends Component
 
         $categoryIds = $categories->pluck('id');
 
-        $spentByCategory = Purchase::query()
-            ->selectRaw('category_id, SUM(amount) as total')
-            ->where('household_id', $household->id)
-            ->whereBetween('reference_date', [$period['start']->toDateString(), $period['end']->toDateString()])
-            ->groupBy('category_id')
-            ->pluck('total', 'category_id');
+        $spentByCategory = $this->spentByCategory($household->id, $period['start']->toDateString(), $period['end']->toDateString());
 
         $budgets = CategoryBudget::query()
             ->whereIn('category_id', $categoryIds)
@@ -178,6 +174,44 @@ class PeriodSummary extends Component
             'nextMonthLabel' => $this->formatMonthName($nextMonth),
             'showNextMonthTotal' => $referenceMonth === $currentMonth,
         ]);
+    }
+
+    private function spentByCategory(int $householdId, string $start, string $end): Collection
+    {
+        $allocationTotalsByPurchase = DB::table('purchase_category_allocations')
+            ->selectRaw('purchase_id, SUM(amount) as total_allocated')
+            ->groupBy('purchase_id');
+
+        $primaryTotals = Purchase::query()
+            ->leftJoinSub($allocationTotalsByPurchase, 'purchase_allocations', function ($join) {
+                $join->on('purchase_allocations.purchase_id', '=', 'purchases.id');
+            })
+            ->where('purchases.household_id', $householdId)
+            ->whereBetween('purchases.reference_date', [$start, $end])
+            ->groupBy('purchases.category_id')
+            ->selectRaw('purchases.category_id, SUM(purchases.amount - COALESCE(purchase_allocations.total_allocated, 0)) as total')
+            ->pluck('total', 'purchases.category_id');
+
+        $allocationTotals = DB::table('purchase_category_allocations')
+            ->join('purchases', 'purchases.id', '=', 'purchase_category_allocations.purchase_id')
+            ->where('purchases.household_id', $householdId)
+            ->whereBetween('purchases.reference_date', [$start, $end])
+            ->groupBy('purchase_category_allocations.category_id')
+            ->selectRaw('purchase_category_allocations.category_id, SUM(purchase_category_allocations.amount) as total')
+            ->pluck('total', 'purchase_category_allocations.category_id');
+
+        $totals = collect();
+
+        foreach ($primaryTotals as $categoryId => $total) {
+            $totals[(int) $categoryId] = (float) $total;
+        }
+
+        foreach ($allocationTotals as $categoryId => $total) {
+            $categoryId = (int) $categoryId;
+            $totals[$categoryId] = (float) ($totals[$categoryId] ?? 0) + (float) $total;
+        }
+
+        return $totals;
     }
 
     private function buildMonthOptions($household): Collection

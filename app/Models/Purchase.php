@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Purchase extends Model
 {
@@ -16,7 +17,6 @@ class Purchase extends Model
         'category_id',
         'payment_method_id',
         'credit_card_id',
-        'purchase_group_id',
         'title',
         'description',
         'amount',
@@ -74,8 +74,17 @@ class Purchase extends Model
         return $this->belongsTo(CreditCard::class);
     }
 
-    public function purchaseGroup(): BelongsTo
+    public function categoryAllocations(): HasMany
     {
-        return $this->belongsTo(PurchaseGroup::class);
+        return $this->hasMany(PurchaseCategoryAllocation::class);
+    }
+
+    public function primaryCategoryAmount(): float
+    {
+        $allocated = $this->relationLoaded('categoryAllocations')
+            ? $this->categoryAllocations->sum(fn (PurchaseCategoryAllocation $allocation) => (float) $allocation->amount)
+            : $this->categoryAllocations()->sum('amount');
+
+        return max(0, (float) $this->amount - (float) $allocated);
     }
 }

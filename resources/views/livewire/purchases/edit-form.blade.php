@@ -9,10 +9,13 @@
 
     <div class="mb-3">
         <label class="form-label" for="category_id">Categoria</label>
-        <select id="category_id" class="form-select" wire:model.defer="category_id" required>
+        <select id="category_id" class="form-select" wire:model.live="category_id" required>
             <option value="">Selecione</option>
             @foreach ($categories as $category)
-                <option value="{{ $category->id }}">{{ $category->description }}</option>
+                @php
+                    $isCategoryUsedAsSubcategory = collect($subcategories)->pluck('category_id')->map(fn ($id) => (int) $id)->contains($category->id);
+                @endphp
+                <option value="{{ $category->id }}" @disabled($isCategoryUsedAsSubcategory)>{{ $category->description }}</option>
             @endforeach
         </select>
         @error('category_id')
@@ -48,6 +51,49 @@
         @error('amount')
             <div class="text-danger mt-2">{{ $message }}</div>
         @enderror
+    </div>
+
+    <div class="mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <label class="form-label mb-0">Subcategorias</label>
+            <button type="button" class="btn btn-outline-dark btn-sm" wire:click="addSubcategory">Adicionar</button>
+        </div>
+        @error('subcategories')
+            <div class="text-danger mt-2">{{ $message }}</div>
+        @enderror
+        @foreach ($subcategories as $index => $subcategory)
+            <div class="row g-2 align-items-start mb-2">
+                <div class="col-6">
+                    <select class="form-select" wire:model.live="subcategories.{{ $index }}.category_id">
+                        <option value="">Subcategoria</option>
+                        @foreach ($categories as $category)
+                            @php
+                                $selectedSubcategoryIds = collect($subcategories)
+                                    ->except($index)
+                                    ->pluck('category_id')
+                                    ->map(fn ($id) => (int) $id);
+                                $isCategoryUnavailable = $category->id === (int) $category_id || $selectedSubcategoryIds->contains($category->id);
+                            @endphp
+                            <option value="{{ $category->id }}" @disabled($isCategoryUnavailable)>{{ $category->description }}</option>
+                        @endforeach
+                    </select>
+                    @error('subcategories.' . $index . '.category_id')
+                        <div class="text-danger small mt-1">{{ $message }}</div>
+                    @enderror
+                </div>
+                <div class="col-4">
+                    <input type="text" inputmode="numeric" class="form-control" placeholder="0,00" wire:model.defer="subcategories.{{ $index }}.amount" oninput="maskPurchaseEditAmount(this)">
+                    @error('subcategories.' . $index . '.amount')
+                        <div class="text-danger small mt-1">{{ $message }}</div>
+                    @enderror
+                </div>
+                <div class="col-2">
+                    <button type="button" class="btn btn-outline-danger w-100" wire:click="removeSubcategory({{ $index }})" aria-label="Remover subcategoria">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </div>
+        @endforeach
     </div>
 
     <div class="mb-3">

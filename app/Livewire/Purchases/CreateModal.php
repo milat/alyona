@@ -7,8 +7,10 @@ use App\Models\CategoryBudget;
 use App\Models\CreditCard;
 use App\Models\PaymentMethod;
 use App\Models\Purchase;
+use App\Models\PurchaseCategoryAllocation;
 use App\Support\BudgetPeriod;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Livewire\Component;
 
 class CreateModal extends Component
@@ -25,10 +27,22 @@ class CreateModal extends Component
     public bool $confirming = false;
     public bool $calculatorOpen = false;
     public string $calculatorExpression = '';
+    public array $subcategories = [];
 
     public function mount(): void
     {
         $this->purchased_at = now()->toDateString();
+    }
+
+    public function addSubcategory(): void
+    {
+        $this->subcategories[] = ['category_id' => null, 'amount' => null];
+    }
+
+    public function removeSubcategory(int $index): void
+    {
+        unset($this->subcategories[$index]);
+        $this->subcategories = array_values($this->subcategories);
     }
 
     public function openConfirm(): void
@@ -43,7 +57,14 @@ class CreateModal extends Component
             'amount' => ['required', 'numeric', 'min:0.01'],
             'installments' => ['nullable', 'integer', 'min:1', 'max:99'],
             'purchased_at' => ['required', 'date'],
+            'subcategories' => ['array'],
+            'subcategories.*.category_id' => ['nullable', 'integer'],
+            'subcategories.*.amount' => ['nullable'],
         ]);
+
+        if (! $this->validateSubcategories((float) $this->amount)) {
+            return;
+        }
 
         if (! $this->resolvePaymentSelection()) {
             $this->addError('payment_option', 'Selecione um meio de pagamento válido.');
@@ -109,6 +130,9 @@ class CreateModal extends Component
             'amount' => ['required', 'numeric', 'min:0.01'],
             'installments' => ['nullable', 'integer', 'min:1', 'max:99'],
             'purchased_at' => ['required', 'date'],
+            'subcategories' => ['array'],
+            'subcategories.*.category_id' => ['nullable', 'integer'],
+            'subcategories.*.amount' => ['nullable'],
         ]);
 
         $user = auth()->user();
@@ -128,6 +152,10 @@ class CreateModal extends Component
             ->where('household_id', $user->household_id)
             ->where('is_active', true)
             ->firstOrFail();
+
+        if (! $this->validateSubcategories((float) $data['amount'])) {
+            return;
+        }
 
         $paymentSelection = $this->resolvePaymentSelection();
 
@@ -152,7 +180,7 @@ class CreateModal extends Component
 
             $titleSuffix = $installments > 1 ? ' ' . $i . '/' . $installments : '';
 
-            Purchase::create([
+            $purchase = Purchase::create([
                 'household_id' => $user->household_id,
                 'user_id' => $user->id,
                 'category_id' => $category->id,
@@ -164,15 +192,93 @@ class CreateModal extends Component
                 'purchased_at' => $this->resolveInstallmentDate($household, $data['purchased_at'], $i),
                 'reference_date' => $baseReferenceDate->copy()->addMonthsNoOverflow($i - 1)->toDateString(),
             ]);
+
+            $this->createSubcategoryAllocations($purchase, $installments, $i, $totalAmount);
         }
 
-        $this->reset(['title', 'description', 'category_id', 'payment_method_id', 'credit_card_id', 'payment_option', 'amount', 'installments']);
+        $this->reset(['title', 'description', 'category_id', 'payment_method_id', 'credit_card_id', 'payment_option', 'amount', 'installments', 'subcategories']);
         $this->purchased_at = now()->toDateString();
         $this->confirming = false;
 
         session()->flash('success', 'Compra cadastrada com sucesso.');
 
         $this->dispatch('purchase-saved');
+    }
+
+    private function validateSubcategories(float $purchaseAmount): bool
+    {
+        $categoryIds = [];
+        $total = 0.0;
+
+        foreach ($this->subcategories as $index => $subcategory) {
+            $categoryId = (int) ($subcategory['category_id'] ?? 0);
+            $amount = $this->normalizeCurrencyValue($subcategory['amount'] ?? null);
+
+            if ($categoryId <= 0 && ($subcategory['amount'] ?? null) === null) {
+                continue;
+            }
+
+            if ($categoryId <= 0) {
+                $this->addError("subcategories.$index.category_id", 'Informe a subcategoria.');
+                return false;
+            }
+
+            if ($categoryId === (int) $this->category_id || in_array($categoryId, $categoryIds, true)) {
+                $this->addError("subcategories.$index.category_id", 'A categoria não pode se repetir na mesma compra.');
+                return false;
+            }
+
+            if ($amount === null || (float) $amount <= 0) {
+                $this->addError("subcategories.$index.amount", 'Informe um valor maior que zero.');
+                return false;
+            }
+
+            $categoryIds[] = $categoryId;
+            $total += (float) $amount;
+            $this->subcategories[$index]['amount'] = number_format((float) $amount, 2, ',', '.');
+        }
+
+        if ($total >= $purchaseAmount) {
+            $this->addError('subcategories', 'A soma das subcategorias deve ser menor que o valor total da compra.');
+            return false;
+        }
+
+        return true;
+    }
+
+    private function normalizedSubcategories(): array
+    {
+        return collect($this->subcategories)
+            ->map(function (array $subcategory) {
+                $categoryId = (int) ($subcategory['category_id'] ?? 0);
+                $amount = $this->normalizeCurrencyValue($subcategory['amount'] ?? null);
+
+                if ($categoryId <= 0 || $amount === null || (float) $amount <= 0) {
+                    return null;
+                }
+
+                return ['category_id' => $categoryId, 'amount' => (float) $amount];
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    private function createSubcategoryAllocations(Purchase $purchase, int $installments, int $installmentNumber, float $totalAmount): void
+    {
+        foreach ($this->normalizedSubcategories() as $subcategory) {
+            $baseAmount = round($subcategory['amount'] / $installments, 2);
+            $previous = $baseAmount * ($installments - 1);
+            $amount = $installmentNumber === $installments
+                ? round($subcategory['amount'] - $previous, 2)
+                : $baseAmount;
+
+            PurchaseCategoryAllocation::create([
+                'purchase_id' => $purchase->id,
+                'category_id' => $subcategory['category_id'],
+                'amount' => $amount,
+            ]);
+        }
     }
 
     private function normalizeCurrencyValue(?string $value): ?string
@@ -381,6 +487,44 @@ class CreateModal extends Component
         return $referenceDate;
     }
 
+    private function spentByCategory(int $householdId, string $start, string $end)
+    {
+        $allocationTotalsByPurchase = DB::table('purchase_category_allocations')
+            ->selectRaw('purchase_id, SUM(amount) as total_allocated')
+            ->groupBy('purchase_id');
+
+        $primaryTotals = Purchase::query()
+            ->leftJoinSub($allocationTotalsByPurchase, 'purchase_allocations', function ($join) {
+                $join->on('purchase_allocations.purchase_id', '=', 'purchases.id');
+            })
+            ->where('purchases.household_id', $householdId)
+            ->whereBetween('purchases.reference_date', [$start, $end])
+            ->groupBy('purchases.category_id')
+            ->selectRaw('purchases.category_id, SUM(purchases.amount - COALESCE(purchase_allocations.total_allocated, 0)) as total')
+            ->pluck('total', 'purchases.category_id');
+
+        $allocationTotals = DB::table('purchase_category_allocations')
+            ->join('purchases', 'purchases.id', '=', 'purchase_category_allocations.purchase_id')
+            ->where('purchases.household_id', $householdId)
+            ->whereBetween('purchases.reference_date', [$start, $end])
+            ->groupBy('purchase_category_allocations.category_id')
+            ->selectRaw('purchase_category_allocations.category_id, SUM(purchase_category_allocations.amount) as total')
+            ->pluck('total', 'purchase_category_allocations.category_id');
+
+        $totals = collect();
+
+        foreach ($primaryTotals as $categoryId => $total) {
+            $totals[(int) $categoryId] = (float) $total;
+        }
+
+        foreach ($allocationTotals as $categoryId => $total) {
+            $categoryId = (int) $categoryId;
+            $totals[$categoryId] = (float) ($totals[$categoryId] ?? 0) + (float) $total;
+        }
+
+        return $totals;
+    }
+
     public function render()
     {
         $user = auth()->user();
@@ -429,12 +573,7 @@ class CreateModal extends Component
                 ->groupBy('category_id')
                 ->map(fn ($items) => $items->first());
 
-            $spent = Purchase::query()
-                ->selectRaw('category_id, SUM(amount) as total')
-                ->where('household_id', $user->household_id)
-                ->whereBetween('reference_date', [$period['start']->toDateString(), $period['end']->toDateString()])
-                ->groupBy('category_id')
-                ->pluck('total', 'category_id');
+            $spent = $this->spentByCategory($user->household_id, $period['start']->toDateString(), $period['end']->toDateString());
 
             $remainingByCategory = $categoryIds->mapWithKeys(function ($id) use ($budgets, $spent) {
                 $budget = $budgets->get($id)?->amount;

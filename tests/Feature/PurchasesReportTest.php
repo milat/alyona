@@ -8,6 +8,7 @@ use App\Models\CreditCard;
 use App\Models\Household;
 use App\Models\PaymentMethod;
 use App\Models\Purchase;
+use App\Models\PurchaseCategoryAllocation;
 use App\Models\User;
 use App\Support\BudgetPeriod;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -116,10 +117,104 @@ class PurchasesReportTest extends TestCase
             ->set('selectedPayments', ['card:' . $creditCard->id])
             ->call('generate')
             ->assertSee('Compra filtrada')
-            ->assertSee('Crédito (Nubank)')
+            ->assertSee('Crédito')
             ->assertDontSee('Compra fora do filtro');
     }
 
+
+
+    public function test_report_category_filter_matches_subcategories(): void
+    {
+        $user = $this->createUserInHousehold();
+        $mainCategory = $this->createCategory($user, 'Mercado');
+        $subCategory = $this->createCategory($user, 'Farmácia');
+        $debit = PaymentMethod::create(['name' => 'Débito']);
+
+        $purchase = Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $mainCategory->id,
+            'payment_method_id' => $debit->id,
+            'title' => 'Compra com subcategoria',
+            'amount' => 100,
+            'purchased_at' => '2026-05-10',
+            'reference_date' => '2026-05-01',
+        ]);
+
+        PurchaseCategoryAllocation::create([
+            'purchase_id' => $purchase->id,
+            'category_id' => $subCategory->id,
+            'amount' => 30,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(PurchasesReport::class)
+            ->set('dateFrom', '2026-05-01')
+            ->set('dateTo', '2026-05-31')
+            ->set('selectedCategories', [(string) $subCategory->id])
+            ->call('generate')
+            ->assertSee('Compra com subcategoria')
+            ->assertSee('Mercado')
+            ->assertSee('report-purchase-categories-' . $purchase->id, false)
+            ->assertSee('Valores por categoria')
+            ->assertSee('R$ 70,00')
+            ->assertSee('Farmácia')
+            ->assertSee('R$ 30,00')
+            ->assertSee('Total')
+            ->assertSee('R$ 100,00')
+            ->assertDontSee('Total: R$ 100,00');
+    }
+
+    public function test_report_category_filter_uses_only_filtered_category_amount_on_rows_and_total(): void
+    {
+        $user = $this->createUserInHousehold();
+        $mainCategory = $this->createCategory($user, 'Mercado');
+        $subCategory = $this->createCategory($user, 'Farmácia');
+        $otherSubCategory = $this->createCategory($user, 'Lazer');
+        $debit = PaymentMethod::create(['name' => 'Débito']);
+
+        $purchase = Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $mainCategory->id,
+            'payment_method_id' => $debit->id,
+            'title' => 'Compra dividida',
+            'amount' => 100,
+            'purchased_at' => '2026-05-10',
+            'reference_date' => '2026-05-01',
+        ]);
+
+        PurchaseCategoryAllocation::create([
+            'purchase_id' => $purchase->id,
+            'category_id' => $subCategory->id,
+            'amount' => 30,
+        ]);
+
+        PurchaseCategoryAllocation::create([
+            'purchase_id' => $purchase->id,
+            'category_id' => $otherSubCategory->id,
+            'amount' => 20,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(PurchasesReport::class)
+            ->set('dateFrom', '2026-05-01')
+            ->set('dateTo', '2026-05-31')
+            ->set('selectedCategories', [(string) $subCategory->id])
+            ->call('generate')
+            ->assertSee('Total: R$ 30,00')
+            ->assertSee('Compra dividida')
+            ->assertSee('R$ 30,00')
+            ->assertDontSee('Total: R$ 100,00')
+            ->set('selectedCategories', [(string) $mainCategory->id])
+            ->call('generate')
+            ->assertSee('Total: R$ 50,00')
+            ->assertSee('R$ 50,00')
+            ->set('selectedCategories', [(string) $mainCategory->id, (string) $subCategory->id])
+            ->call('generate')
+            ->assertSee('Total: R$ 80,00')
+            ->assertSee('R$ 80,00');
+    }
 
     public function test_report_dates_default_to_one_month_ago_and_today(): void
     {

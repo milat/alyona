@@ -6,6 +6,7 @@ use App\Models\Category;
 use App\Models\CreditCard;
 use App\Models\PaymentMethod;
 use App\Models\Purchase;
+use App\Models\PurchaseCategoryAllocation;
 use Carbon\Carbon;
 use Livewire\Component;
 
@@ -20,6 +21,7 @@ class EditForm extends Component
     public ?int $credit_card_id = null;
     public ?string $amount = null;
     public string $purchased_at = '';
+    public array $subcategories = [];
     public ?string $returnMonth = null;
 
     public function mount(int $purchaseId, ?string $returnMonth = null): void
@@ -41,6 +43,25 @@ class EditForm extends Component
             : 'method:' . $purchase->payment_method_id;
         $this->amount = number_format((float) $purchase->amount, 2, ',', '.');
         $this->purchased_at = $purchase->purchased_at->toDateString();
+        $this->subcategories = $purchase->categoryAllocations()
+            ->get(['category_id', 'amount'])
+            ->map(fn (PurchaseCategoryAllocation $allocation) => [
+                'category_id' => $allocation->category_id,
+                'amount' => number_format((float) $allocation->amount, 2, ',', '.'),
+            ])
+            ->values()
+            ->all();
+    }
+
+    public function addSubcategory(): void
+    {
+        $this->subcategories[] = ['category_id' => null, 'amount' => null];
+    }
+
+    public function removeSubcategory(int $index): void
+    {
+        unset($this->subcategories[$index]);
+        $this->subcategories = array_values($this->subcategories);
     }
 
     public function save(): void
@@ -54,6 +75,9 @@ class EditForm extends Component
             'payment_option' => ['required', 'string'],
             'amount' => ['required', 'numeric', 'min:0.01'],
             'purchased_at' => ['required', 'date'],
+            'subcategories' => ['array'],
+            'subcategories.*.category_id' => ['nullable', 'integer'],
+            'subcategories.*.amount' => ['nullable'],
         ]);
 
         $purchase = $this->getPurchase($this->purchaseId);
@@ -64,6 +88,10 @@ class EditForm extends Component
             ->where('household_id', $user->household_id)
             ->where('is_active', true)
             ->firstOrFail();
+
+        if (! $this->validateSubcategories((float) $data['amount'])) {
+            return;
+        }
 
         $paymentSelection = $this->resolvePaymentSelection();
 
@@ -82,6 +110,15 @@ class EditForm extends Component
             'purchased_at' => Carbon::parse($data['purchased_at'])->toDateString(),
             'reference_date' => $this->resolveReferenceDate($data['purchased_at'], $paymentSelection['credit_card'])->toDateString(),
         ]);
+
+        $purchase->categoryAllocations()->delete();
+        foreach ($this->normalizedSubcategories() as $subcategory) {
+            PurchaseCategoryAllocation::create([
+                'purchase_id' => $purchase->id,
+                'category_id' => $subcategory['category_id'],
+                'amount' => $subcategory['amount'],
+            ]);
+        }
 
         session()->flash('success', 'Compra atualizada com sucesso.');
 
@@ -234,6 +271,65 @@ class EditForm extends Component
             'creditCards' => $creditCards,
             'paymentOptions' => $paymentOptions,
         ]);
+    }
+
+    private function validateSubcategories(float $purchaseAmount): bool
+    {
+        $categoryIds = [];
+        $total = 0.0;
+
+        foreach ($this->subcategories as $index => $subcategory) {
+            $categoryId = (int) ($subcategory['category_id'] ?? 0);
+            $amount = $this->normalizeCurrencyValue($subcategory['amount'] ?? null);
+
+            if ($categoryId <= 0 && ($subcategory['amount'] ?? null) === null) {
+                continue;
+            }
+
+            if ($categoryId <= 0) {
+                $this->addError("subcategories.$index.category_id", 'Informe a subcategoria.');
+                return false;
+            }
+
+            if ($categoryId === (int) $this->category_id || in_array($categoryId, $categoryIds, true)) {
+                $this->addError("subcategories.$index.category_id", 'A categoria não pode se repetir na mesma compra.');
+                return false;
+            }
+
+            if ($amount === null || (float) $amount <= 0) {
+                $this->addError("subcategories.$index.amount", 'Informe um valor maior que zero.');
+                return false;
+            }
+
+            $categoryIds[] = $categoryId;
+            $total += (float) $amount;
+            $this->subcategories[$index]['amount'] = number_format((float) $amount, 2, ',', '.');
+        }
+
+        if ($total >= $purchaseAmount) {
+            $this->addError('subcategories', 'A soma das subcategorias deve ser menor que o valor total da compra.');
+            return false;
+        }
+
+        return true;
+    }
+
+    private function normalizedSubcategories(): array
+    {
+        return collect($this->subcategories)
+            ->map(function (array $subcategory) {
+                $categoryId = (int) ($subcategory['category_id'] ?? 0);
+                $amount = $this->normalizeCurrencyValue($subcategory['amount'] ?? null);
+
+                if ($categoryId <= 0 || $amount === null || (float) $amount <= 0) {
+                    return null;
+                }
+
+                return ['category_id' => $categoryId, 'amount' => (float) $amount];
+            })
+            ->filter()
+            ->values()
+            ->all();
     }
 
     private function normalizeCurrencyValue(?string $value): ?string

@@ -4,19 +4,15 @@ namespace App\Livewire\Purchases;
 
 use App\Models\Category;
 use App\Models\Purchase;
-use App\Models\PurchaseGroup;
 use App\Support\BudgetPeriod;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
 use Livewire\Component;
-use Livewire\WithPagination;
 
 class Index extends Component
 {
-    use WithPagination;
-
     #[Url(as: 'mes', except: null)]
     public ?string $selectedMonth = null;
 
@@ -33,10 +29,6 @@ class Index extends Component
     public bool $showSearch = false;
 
     public bool $showSort = false;
-
-    public bool $showGrouping = false;
-
-    public array $selectedPurchaseIds = [];
 
     public string $sortBy = 'date';
 
@@ -76,7 +68,7 @@ class Index extends Component
 
     public function updatedSelectedMonth(): void
     {
-        $this->resetPage();
+        // Livewire re-renders the component after the month changes.
     }
 
     public function toggleSearch(): void
@@ -89,101 +81,11 @@ class Index extends Component
         $this->showSort = ! $this->showSort;
     }
 
-    public function groupSelectedPurchases(): void
-    {
-        $user = auth()->user();
-
-        if (! $user || $user->household_id === null) {
-            return;
-        }
-
-        $ids = $this->selectedPurchaseIds();
-
-        if (count($ids) < 2) {
-            $this->showGrouping = true;
-            $this->addError('selectedPurchaseIds', 'Selecione pelo menos duas compras para agrupar.');
-            return;
-        }
-
-        $purchases = Purchase::query()
-            ->where('household_id', $user->household_id)
-            ->whereIn('id', $ids)
-            ->get(['id', 'purchase_group_id']);
-
-        if ($purchases->count() !== count($ids)) {
-            $this->showGrouping = true;
-            $this->addError('selectedPurchaseIds', 'Selecione apenas compras válidas deste grupo.');
-            return;
-        }
-
-        if ($purchases->contains(fn (Purchase $purchase) => $purchase->purchase_group_id !== null)) {
-            $this->showGrouping = true;
-            $this->addError('selectedPurchaseIds', 'Uma ou mais compras selecionadas já estão agrupadas.');
-            return;
-        }
-
-        $group = PurchaseGroup::create([
-            'household_id' => $user->household_id,
-        ]);
-
-        Purchase::query()
-            ->where('household_id', $user->household_id)
-            ->whereIn('id', $ids)
-            ->update(['purchase_group_id' => $group->id]);
-
-        $this->selectedPurchaseIds = [];
-        $this->showGrouping = false;
-        session()->flash('success', 'Compras agrupadas com sucesso.');
-    }
-
-    public function ungroupSelectedPurchases(): void
-    {
-        $user = auth()->user();
-
-        if (! $user || $user->household_id === null) {
-            return;
-        }
-
-        $ids = $this->selectedPurchaseIds();
-
-        if ($ids === []) {
-            $this->showGrouping = true;
-            $this->addError('selectedPurchaseIds', 'Selecione ao menos uma compra para desagrupar.');
-            return;
-        }
-
-        $groupIds = Purchase::query()
-            ->where('household_id', $user->household_id)
-            ->whereIn('id', $ids)
-            ->whereNotNull('purchase_group_id')
-            ->pluck('purchase_group_id')
-            ->unique()
-            ->values();
-
-        if ($groupIds->isEmpty()) {
-            $this->showGrouping = true;
-            $this->addError('selectedPurchaseIds', 'As compras selecionadas não estão agrupadas.');
-            return;
-        }
-
-        Purchase::query()
-            ->where('household_id', $user->household_id)
-            ->whereIn('id', $ids)
-            ->update(['purchase_group_id' => null]);
-
-        $this->deleteEmptyPurchaseGroups($user->household_id, $groupIds);
-
-        $this->selectedPurchaseIds = [];
-        $this->showGrouping = false;
-        session()->flash('success', 'Agrupamento removido com sucesso.');
-    }
-
     public function applyFilters(): void
     {
         $this->selectedCategoryId = $this->categoryFilterInput ?: null;
         $this->search = trim($this->searchInput);
         $this->showSearch = false;
-        $this->resetPage();
     }
 
     public function clearFilters(): void
@@ -193,7 +95,6 @@ class Index extends Component
         $this->search = '';
         $this->searchInput = '';
         $this->showSearch = false;
-        $this->resetPage();
     }
 
     public function applySort(): void
@@ -204,7 +105,6 @@ class Index extends Component
         $this->sortBy = in_array($this->sortByInput, $allowedSorts, true) ? $this->sortByInput : 'date';
         $this->sortDirection = in_array($this->sortDirectionInput, $allowedDirections, true) ? $this->sortDirectionInput : 'desc';
         $this->showSort = false;
-        $this->resetPage();
     }
 
     public function clearSort(): void
@@ -214,7 +114,6 @@ class Index extends Component
         $this->sortByInput = 'date';
         $this->sortDirectionInput = 'desc';
         $this->showSort = false;
-        $this->resetPage();
     }
 
     public function render()
@@ -224,12 +123,6 @@ class Index extends Component
         $monthOptions = collect();
         $categoryOptions = collect();
         $filteredTotal = 0;
-        $groupTotals = collect();
-        $groupingState = [
-            'mode' => null,
-            'canGroup' => false,
-            'canUngroup' => false,
-        ];
 
         if ($user && $user->household_id !== null) {
             $household = $user->household;
@@ -255,7 +148,7 @@ class Index extends Component
                 [$year, $month] = explode('-', $this->selectedMonth);
                 $period = BudgetPeriod::forYearMonth($household, (int) $year, (int) $month);
 
-                $categoryIdsWithPurchases = Purchase::query()
+                $primaryCategoryIds = Purchase::query()
                     ->where('household_id', $user->household_id)
                     ->whereBetween('reference_date', [
                         $period['start']->toDateString(),
@@ -263,6 +156,18 @@ class Index extends Component
                     ])
                     ->distinct()
                     ->pluck('category_id');
+
+                $allocationCategoryIds = \App\Models\PurchaseCategoryAllocation::query()
+                    ->join('purchases', 'purchases.id', '=', 'purchase_category_allocations.purchase_id')
+                    ->where('purchases.household_id', $user->household_id)
+                    ->whereBetween('purchases.reference_date', [
+                        $period['start']->toDateString(),
+                        $period['end']->toDateString(),
+                    ])
+                    ->distinct()
+                    ->pluck('purchase_category_allocations.category_id');
+
+                $categoryIdsWithPurchases = $primaryCategoryIds->merge($allocationCategoryIds)->unique()->values();
             }
 
             $categoryUsageStart = now()->copy()->subDays(90)->toDateString();
@@ -293,7 +198,7 @@ class Index extends Component
             }
 
             $query = Purchase::query()
-                ->with(['category', 'paymentMethod', 'creditCard', 'user'])
+                ->with(['category', 'categoryAllocations.category', 'paymentMethod', 'creditCard', 'user'])
                 ->where('purchases.household_id', $user->household_id);
 
             if ($this->selectedMonth) {
@@ -306,16 +211,18 @@ class Index extends Component
             }
 
             if ($this->selectedCategoryId !== null) {
-                $query->where('purchases.category_id', (int) $this->selectedCategoryId);
+                $selectedCategoryId = (int) $this->selectedCategoryId;
+                $query->where(function ($categoryQuery) use ($selectedCategoryId) {
+                    $categoryQuery->where('purchases.category_id', $selectedCategoryId)
+                        ->orWhereHas('categoryAllocations', fn ($allocationQuery) => $allocationQuery->where('category_id', $selectedCategoryId));
+                });
             }
 
             $this->applySearch($query);
 
             $filteredTotal = (float) (clone $query)->sum('purchases.amount');
             $this->applySorting($query);
-            $purchases = $query->paginate(100)->withQueryString();
-            $groupTotals = $this->groupTotalsFor($purchases->getCollection());
-            $groupingState = $this->groupingStateFor($purchases->getCollection());
+            $purchases = $query->get();
 
             if ($purchases->isEmpty() && $this->hasActiveFilters()) {
                 $this->showSearch = true;
@@ -327,78 +234,9 @@ class Index extends Component
             'monthOptions' => $monthOptions,
             'categoryOptions' => $categoryOptions,
             'filteredTotal' => $filteredTotal,
-            'groupTotals' => $groupTotals,
-            'groupingState' => $groupingState,
         ]);
     }
 
-
-    private function selectedPurchaseIds(): array
-    {
-        return collect($this->selectedPurchaseIds)
-            ->map(fn ($id) => (int) $id)
-            ->filter(fn (int $id) => $id > 0)
-            ->unique()
-            ->values()
-            ->all();
-    }
-
-
-    private function groupingStateFor(Collection $purchases): array
-    {
-        $selectedIds = $this->selectedPurchaseIds();
-
-        if ($selectedIds === []) {
-            return [
-                'mode' => null,
-                'canGroup' => false,
-                'canUngroup' => false,
-            ];
-        }
-
-        $selectedPurchases = $purchases->whereIn('id', $selectedIds);
-        $groupedCount = $selectedPurchases->filter(fn (Purchase $purchase) => $purchase->purchase_group_id !== null)->count();
-        $ungroupedCount = $selectedPurchases->filter(fn (Purchase $purchase) => $purchase->purchase_group_id === null)->count();
-        $mode = $groupedCount > 0 ? 'grouped' : 'ungrouped';
-
-        return [
-            'mode' => $mode,
-            'canGroup' => $mode === 'ungrouped' && $ungroupedCount >= 2,
-            'canUngroup' => $mode === 'grouped' && $groupedCount >= 1,
-        ];
-    }
-
-    private function groupTotalsFor(Collection $purchases): Collection
-    {
-        $groupIds = $purchases
-            ->pluck('purchase_group_id')
-            ->filter()
-            ->unique()
-            ->values();
-
-        if ($groupIds->isEmpty()) {
-            return collect();
-        }
-
-        return Purchase::query()
-            ->selectRaw('purchase_group_id, SUM(amount) as total')
-            ->whereIn('purchase_group_id', $groupIds)
-            ->groupBy('purchase_group_id')
-            ->pluck('total', 'purchase_group_id');
-    }
-
-    private function deleteEmptyPurchaseGroups(int $householdId, Collection $groupIds): void
-    {
-        $remainingGroupIds = Purchase::query()
-            ->whereIn('purchase_group_id', $groupIds)
-            ->pluck('purchase_group_id')
-            ->unique();
-
-        PurchaseGroup::query()
-            ->where('household_id', $householdId)
-            ->whereIn('id', $groupIds->diff($remainingGroupIds))
-            ->delete();
-    }
 
     private function buildMonthOptions($household): Collection
     {
@@ -507,6 +345,9 @@ class Index extends Component
                 ->where('purchases.title', 'like', $like)
                 ->orWhere('purchases.purchased_at', 'like', $like)
                 ->orWhereHas('category', function ($categoryQuery) use ($like) {
+                    $categoryQuery->where('description', 'like', $like);
+                })
+                ->orWhereHas('categoryAllocations.category', function ($categoryQuery) use ($like) {
                     $categoryQuery->where('description', 'like', $like);
                 })
                 ->orWhereHas('paymentMethod', function ($paymentMethodQuery) use ($like) {
