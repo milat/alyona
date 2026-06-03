@@ -27,6 +27,8 @@ class CreateModal extends Component
     public bool $confirming = false;
     public bool $calculatorOpen = false;
     public string $calculatorExpression = '';
+    public ?int $subcategoryCalculatorIndex = null;
+    public string $subcategoryCalculatorExpression = '';
     public array $subcategories = [];
 
     public function mount(): void
@@ -84,6 +86,18 @@ class CreateModal extends Component
         $this->calculatorOpen = ! $this->calculatorOpen;
     }
 
+    public function toggleSubcategoryCalculator(int $index): void
+    {
+        if ($this->subcategoryCalculatorIndex === $index) {
+            $this->subcategoryCalculatorIndex = null;
+            $this->subcategoryCalculatorExpression = '';
+            return;
+        }
+
+        $this->subcategoryCalculatorIndex = $index;
+        $this->subcategoryCalculatorExpression = '';
+    }
+
     public function appendCalculator(string $token): void
     {
         if (! preg_match('/^[0-9+\-*\/.]$/', $token)) {
@@ -116,6 +130,25 @@ class CreateModal extends Component
         $this->amount = number_format($result, 2, ',', '.');
         $this->calculatorOpen = false;
         $this->calculatorExpression = '';
+    }
+
+    public function applySubcategoryCalculatorResult(): void
+    {
+        if ($this->subcategoryCalculatorIndex === null || ! array_key_exists($this->subcategoryCalculatorIndex, $this->subcategories)) {
+            return;
+        }
+
+        $result = $this->evaluateCalculatorExpression($this->subcategoryCalculatorExpression);
+
+        if ($result === null) {
+            $this->addError('subcategories.' . $this->subcategoryCalculatorIndex . '.amount', 'Expressão inválida na calculadora.');
+            return;
+        }
+
+        $result = max(0, $result);
+        $this->subcategories[$this->subcategoryCalculatorIndex]['amount'] = number_format($result, 2, ',', '.');
+        $this->subcategoryCalculatorIndex = null;
+        $this->subcategoryCalculatorExpression = '';
     }
 
     public function save(): void
@@ -196,7 +229,7 @@ class CreateModal extends Component
             $this->createSubcategoryAllocations($purchase, $installments, $i, $totalAmount);
         }
 
-        $this->reset(['title', 'description', 'category_id', 'payment_method_id', 'credit_card_id', 'payment_option', 'amount', 'installments', 'subcategories']);
+        $this->reset(['title', 'description', 'category_id', 'payment_method_id', 'credit_card_id', 'payment_option', 'amount', 'installments', 'subcategories', 'subcategoryCalculatorIndex', 'subcategoryCalculatorExpression']);
         $this->purchased_at = now()->toDateString();
         $this->confirming = false;
 
