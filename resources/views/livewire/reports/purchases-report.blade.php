@@ -94,8 +94,8 @@
                                 <th>Data</th>
                                 <th>Título</th>
                                 <th>Categoria</th>
-                                <th>Pagamento</th>
                                 <th class="text-end">Valor</th>
+                                <th>Pagamento</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -153,6 +153,7 @@
                                             <span class="text-secondary">--</span>
                                         @endif
                                     </td>
+                                    <td class="text-end text-nowrap">R$ {{ number_format((float) ($purchase->report_amount ?? $purchase->amount), 2, ',', '.') }}</td>
                                     <td>
                                         @if ($purchase->creditCard)
                                             Crédito
@@ -160,7 +161,6 @@
                                             {{ $purchase->paymentMethod?->name }}
                                         @endif
                                     </td>
-                                    <td class="text-end text-nowrap">R$ {{ number_format((float) ($purchase->report_amount ?? $purchase->amount), 2, ',', '.') }}</td>
                                 </tr>
                             @endforeach
                         </tbody>

@@ -22,6 +22,8 @@ class EditForm extends Component
     public ?string $amount = null;
     public string $purchased_at = '';
     public array $subcategories = [];
+    public ?int $subcategoryCalculatorIndex = null;
+    public string $subcategoryCalculatorExpression = '';
     public ?string $returnMonth = null;
 
     public function mount(int $purchaseId, ?string $returnMonth = null): void
@@ -62,6 +64,42 @@ class EditForm extends Component
     {
         unset($this->subcategories[$index]);
         $this->subcategories = array_values($this->subcategories);
+
+        if ($this->subcategoryCalculatorIndex === $index) {
+            $this->subcategoryCalculatorIndex = null;
+            $this->subcategoryCalculatorExpression = '';
+        }
+    }
+
+    public function toggleSubcategoryCalculator(int $index): void
+    {
+        if ($this->subcategoryCalculatorIndex === $index) {
+            $this->subcategoryCalculatorIndex = null;
+            $this->subcategoryCalculatorExpression = '';
+            return;
+        }
+
+        $this->subcategoryCalculatorIndex = $index;
+        $this->subcategoryCalculatorExpression = '';
+    }
+
+    public function applySubcategoryCalculatorResult(): void
+    {
+        if ($this->subcategoryCalculatorIndex === null || ! array_key_exists($this->subcategoryCalculatorIndex, $this->subcategories)) {
+            return;
+        }
+
+        $result = $this->evaluateCalculatorExpression($this->subcategoryCalculatorExpression);
+
+        if ($result === null) {
+            $this->addError('subcategories.' . $this->subcategoryCalculatorIndex . '.amount', 'Expressão inválida na calculadora.');
+            return;
+        }
+
+        $result = max(0, $result);
+        $this->subcategories[$this->subcategoryCalculatorIndex]['amount'] = number_format($result, 2, ',', '.');
+        $this->subcategoryCalculatorIndex = null;
+        $this->subcategoryCalculatorExpression = '';
     }
 
     public function save(): void
@@ -345,6 +383,95 @@ class EditForm extends Component
         }
 
         return number_format(((int) $digits) / 100, 2, '.', '');
+    }
+
+    private function evaluateCalculatorExpression(string $expression): ?float
+    {
+        $expression = str_replace(',', '.', preg_replace('/\s+/', '', $expression));
+
+        if ($expression === '' || ! preg_match('/^[0-9+\-*\/.]+$/', $expression)) {
+            return null;
+        }
+
+        preg_match_all('/\d+(?:\.\d+)?|[+\-*\/]/', $expression, $matches);
+        $tokens = $matches[0] ?? [];
+
+        if ($tokens === [] || implode('', $tokens) !== $expression) {
+            return null;
+        }
+
+        $expectNumber = true;
+        $values = [];
+        $ops = [];
+
+        foreach ($tokens as $token) {
+            if (preg_match('/^\d+(?:\.\d+)?$/', $token)) {
+                if (! $expectNumber) {
+                    return null;
+                }
+
+                $values[] = (float) $token;
+                $expectNumber = false;
+                continue;
+            }
+
+            if ($expectNumber) {
+                return null;
+            }
+
+            while ($ops !== [] && $this->calculatorPrecedence(end($ops)) >= $this->calculatorPrecedence($token)) {
+                if (! $this->calculatorApplyTopOperation($values, $ops)) {
+                    return null;
+                }
+            }
+
+            $ops[] = $token;
+            $expectNumber = true;
+        }
+
+        if ($expectNumber) {
+            return null;
+        }
+
+        while ($ops !== []) {
+            if (! $this->calculatorApplyTopOperation($values, $ops)) {
+                return null;
+            }
+        }
+
+        return isset($values[0]) ? round((float) $values[0], 2) : null;
+    }
+
+    private function calculatorPrecedence(string $operator): int
+    {
+        return in_array($operator, ['*', '/'], true) ? 2 : 1;
+    }
+
+    private function calculatorApplyTopOperation(array &$values, array &$ops): bool
+    {
+        $operator = array_pop($ops);
+        $right = array_pop($values);
+        $left = array_pop($values);
+
+        if ($operator === null || $left === null || $right === null) {
+            return false;
+        }
+
+        $result = match ($operator) {
+            '+' => $left + $right,
+            '-' => $left - $right,
+            '*' => $left * $right,
+            '/' => $right == 0.0 ? null : $left / $right,
+            default => null,
+        };
+
+        if ($result === null || is_nan($result) || is_infinite($result)) {
+            return false;
+        }
+
+        $values[] = $result;
+
+        return true;
     }
 
     private function resolveReferenceDate(string $purchasedAt, ?CreditCard $creditCard): Carbon
