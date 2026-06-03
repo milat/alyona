@@ -124,8 +124,8 @@
                             <th>Data</th>
                             <th>Título</th>
                             <th>Categoria</th>
-                            <th>Pagamento</th>
                             <th class="text-end">Valor</th>
+                            <th>Pagamento</th>
                             <th class="text-end">Ações</th>
                         </tr>
                     </thead>
@@ -133,7 +133,15 @@
                         @foreach ($purchases as $purchase)
                             <tr>
                                 <td>
-                                    {{ $purchase->purchased_at->format('d/m/Y') }}
+                                    <button
+                                        type="button"
+                                        class="btn btn-link btn-sm p-0 text-decoration-none text-dark align-baseline"
+                                        data-bs-toggle="modal"
+                                        data-bs-target="#purchase-date-{{ $purchase->id }}"
+                                        aria-label="Ver data completa"
+                                    >
+                                        {{ $purchase->purchased_at->format('d/m') }}
+                                    </button>
                                     <div class="small text-secondary">{{ $purchase->user?->name ?? '-' }}</div>
                                 </td>
                                 <td>
@@ -184,15 +192,15 @@
                                         <span class="text-secondary">--</span>
                                     @endif
                                 </td>
+                                <td class="text-end text-nowrap">
+                                    R$ {{ number_format($purchase->amount, 2, ',', '.') }}
+                                </td>
                                 <td>
                                     @if ($purchase->creditCard)
                                         Crédito
                                     @else
                                         {{ $purchase->paymentMethod?->name }}
                                     @endif
-                                </td>
-                                <td class="text-end text-nowrap">
-                                    R$ {{ number_format($purchase->amount, 2, ',', '.') }}
                                 </td>
                                 <td class="text-end">
                                     <div class="d-inline-flex align-items-center gap-1 flex-nowrap">
@@ -224,6 +232,38 @@
                 </table>
             </div>
             @foreach ($purchases as $purchase)
+                <div class="modal fade" id="purchase-date-{{ $purchase->id }}" tabindex="-1" aria-hidden="true" wire:ignore.self>
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">{{ $purchase->title }}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-2">
+                                    <div class="small text-secondary">Valor</div>
+                                    <div>R$ {{ number_format($purchase->amount, 2, ',', '.') }}</div>
+                                </div>
+                                <div class="mb-2">
+                                    <div class="small text-secondary">Data da compra</div>
+                                    <div>{{ $purchase->purchased_at->format('d/m/Y') }}</div>
+                                </div>
+                                <div class="mb-2">
+                                    <div class="small text-secondary">Data de cadastro</div>
+                                    <div>{{ $purchase->created_at?->format('d/m/Y H:i') }}</div>
+                                </div>
+                                <div>
+                                    <div class="small text-secondary">Usuário</div>
+                                    <div>{{ $purchase->user?->name ?? '-' }}</div>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-outline-dark" data-bs-dismiss="modal">Fechar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 @if ($purchase->description)
                     <div class="modal fade" id="purchase-desc-{{ $purchase->id }}" tabindex="-1" aria-hidden="true" wire:ignore.self>
                         <div class="modal-dialog">
