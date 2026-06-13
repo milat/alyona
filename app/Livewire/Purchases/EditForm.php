@@ -8,6 +8,7 @@ use App\Models\PaymentMethod;
 use App\Models\Purchase;
 use App\Models\PurchaseCategoryAllocation;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Livewire\Component;
 
 class EditForm extends Component
@@ -25,6 +26,7 @@ class EditForm extends Component
     public ?int $subcategoryCalculatorIndex = null;
     public string $subcategoryCalculatorExpression = '';
     public ?string $returnMonth = null;
+    public bool $hasInstallmentGroup = false;
 
     public function mount(int $purchaseId, ?string $returnMonth = null): void
     {
@@ -35,6 +37,7 @@ class EditForm extends Component
             ?: request()->query('mes')
             ?: $purchase->reference_date?->format('Y-m')
             ?: $purchase->purchased_at->format('Y-m');
+        $this->hasInstallmentGroup = $purchase->isInstallmentGroup();
         $this->title = $purchase->title;
         $this->description = $purchase->description;
         $this->category_id = $purchase->category_id;
@@ -102,7 +105,7 @@ class EditForm extends Component
         $this->subcategoryCalculatorExpression = '';
     }
 
-    public function save(): void
+    public function save(bool $applyToInstallments = false): void
     {
         $this->amount = $this->normalizeCurrencyValue($this->amount);
 
@@ -138,15 +141,65 @@ class EditForm extends Component
             return;
         }
 
+        if ($applyToInstallments && $purchase->isInstallmentGroup()) {
+            $installments = Purchase::query()
+                ->where('household_id', $user->household_id)
+                ->where('installment_group_id', $purchase->installment_group_id)
+                ->orderBy('installment_number')
+                ->orderBy('reference_date')
+                ->orderBy('id')
+                ->get();
+
+            $this->updateInstallments($installments, $data, $category->id, $paymentSelection);
+
+            session()->flash('success', 'Parcelas atualizadas com sucesso.');
+        } else {
+            $this->updatePurchase($purchase, $data, $category->id, $paymentSelection);
+
+            session()->flash('success', 'Compra atualizada com sucesso.');
+        }
+
+        $this->redirect($this->purchasesIndexUrl(), navigate: true);
+    }
+
+
+    private function updateInstallments(Collection $installments, array $data, int $categoryId, array $paymentSelection): void
+    {
+        $baseReferenceDate = $this->resolveReferenceDate($data['purchased_at'], $paymentSelection['credit_card']);
+        $baseTitle = $this->baseInstallmentTitle($data['title']);
+        $count = $installments->count();
+
+        foreach ($installments->values() as $index => $installment) {
+            $number = (int) ($installment->installment_number ?: $index + 1);
+            $installmentData = $data;
+            $installmentData['title'] = $count > 1 ? $baseTitle . ' ' . $number . '/' . $count : $baseTitle;
+
+            $this->updatePurchase(
+                $installment,
+                $installmentData,
+                $categoryId,
+                $paymentSelection,
+                $baseReferenceDate->copy()->addMonthsNoOverflow($number - 1)
+            );
+
+            $installment->forceFill([
+                'installment_number' => $number,
+                'installments_count' => $count,
+            ])->save();
+        }
+    }
+
+    private function updatePurchase(Purchase $purchase, array $data, int $categoryId, array $paymentSelection, ?Carbon $referenceDate = null): void
+    {
         $purchase->update([
-            'category_id' => $category->id,
+            'category_id' => $categoryId,
             'payment_method_id' => $paymentSelection['payment_method']->id,
             'credit_card_id' => $paymentSelection['credit_card']?->id,
             'title' => $data['title'],
             'description' => $data['description'],
             'amount' => $data['amount'],
             'purchased_at' => Carbon::parse($data['purchased_at'])->toDateString(),
-            'reference_date' => $this->resolveReferenceDate($data['purchased_at'], $paymentSelection['credit_card'])->toDateString(),
+            'reference_date' => ($referenceDate ?: $this->resolveReferenceDate($data['purchased_at'], $paymentSelection['credit_card']))->toDateString(),
         ]);
 
         $purchase->categoryAllocations()->delete();
@@ -157,12 +210,12 @@ class EditForm extends Component
                 'amount' => $subcategory['amount'],
             ]);
         }
-
-        session()->flash('success', 'Compra atualizada com sucesso.');
-
-        $this->redirect($this->purchasesIndexUrl(), navigate: true);
     }
 
+    private function baseInstallmentTitle(string $title): string
+    {
+        return trim((string) preg_replace('/\s+\d+\/\d+$/', '', $title));
+    }
 
     private function purchasesIndexUrl(): string
     {

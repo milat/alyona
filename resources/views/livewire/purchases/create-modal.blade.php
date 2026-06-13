@@ -16,6 +16,18 @@
                                     <dd class="col-7">{{ $title }}</dd>
                                     <dt class="col-5">Descricao</dt>
                                     <dd class="col-7">{{ $description ?: '--' }}</dd>
+                                    <dt class="col-5">Pagamento</dt>
+                                    <dd class="col-7">
+                                        @if ($credit_card_id)
+                                            Crédito ({{ optional($creditCards->firstWhere('id', $credit_card_id))->title }})
+                                        @else
+                                            {{ optional($paymentMethods->firstWhere('id', $payment_method_id))->name }}
+                                        @endif
+                                    </dd>
+                                    <dt class="col-5">Parcelas</dt>
+                                    <dd class="col-7">{{ $installments ?: 'Sem parcelamento' }}</dd>
+                                    <dt class="col-5">Valor</dt>
+                                    <dd class="col-7">R$ {{ number_format((float) $amount, 2, ',', '.') }}</dd>
                                     <dt class="col-5">Categoria</dt>
                                     <dd class="col-7">
                                         {{ optional($categories->firstWhere('id', $category_id))->description }}
@@ -39,18 +51,6 @@
                                             @endforeach
                                         </dd>
                                     @endif
-                                    <dt class="col-5">Pagamento</dt>
-                                    <dd class="col-7">
-                                        @if ($credit_card_id)
-                                            Crédito ({{ optional($creditCards->firstWhere('id', $credit_card_id))->title }})
-                                        @else
-                                            {{ optional($paymentMethods->firstWhere('id', $payment_method_id))->name }}
-                                        @endif
-                                    </dd>
-                                    <dt class="col-5">Parcelas</dt>
-                                    <dd class="col-7">{{ $installments ?: 'Sem parcelamento' }}</dd>
-                                    <dt class="col-5">Valor</dt>
-                                    <dd class="col-7">R$ {{ number_format((float) $amount, 2, ',', '.') }}</dd>
                                     @php
                                         $effectiveInstallments = (int) ($installments ?: 1);
                                     @endphp
@@ -70,64 +70,6 @@
                                 <label class="form-label" for="title">Titulo</label>
                                 <input id="title" type="text" class="form-control" wire:model.defer="title" required>
                                 @error('title')
-                                    <div class="text-danger mt-2">{{ $message }}</div>
-                                @enderror
-                            </div>
-
-                            <div class="mb-3">
-                                <label class="form-label" for="category_id">Categoria</label>
-                                @php
-                                    $selectedCategory = $categories->firstWhere('id', $category_id);
-                                @endphp
-                                <div class="dropdown w-100">
-                                    <button
-                                        class="btn btn-outline-secondary dropdown-toggle w-100 text-start d-flex align-items-center justify-content-between"
-                                        type="button"
-                                        data-bs-toggle="dropdown"
-                                        aria-expanded="false"
-                                    >
-                                        <span class="d-inline-flex align-items-center">
-                                            @if ($selectedCategory)
-                                                <span class="d-inline-block rounded-circle me-2" style="width: 10px; height: 10px; background: {{ $selectedCategory->color }}; border: 1px solid #dee2e6;"></span>
-                                                <span>{{ $selectedCategory->description }}</span>
-                                            @else
-                                                <span class="text-secondary">Selecione</span>
-                                            @endif
-                                        </span>
-                                    </button>
-                                    <ul class="dropdown-menu w-100" style="max-height: 260px; overflow-y: auto;">
-                                        @foreach ($categories as $category)
-                                            @php
-                                                $remaining = $remainingByCategory[$category->id] ?? null;
-                                                $isCategoryUsedAsSubcategory = collect($subcategories)
-                                                    ->pluck('category_id')
-                                                    ->map(fn ($id) => (int) $id)
-                                                    ->contains($category->id);
-                                            @endphp
-                                            <li>
-                                                <button
-                                                    type="button"
-                                                    class="dropdown-item d-flex justify-content-between align-items-start gap-2"
-                                                    wire:click="$set('category_id', {{ $category->id }})"
-                                                    @disabled($isCategoryUsedAsSubcategory)
-                                                >
-                                                    <span class="d-inline-flex align-items-center">
-                                                        <span class="d-inline-block rounded-circle me-2" style="width: 10px; height: 10px; background: {{ $category->color }}; border: 1px solid #dee2e6;"></span>
-                                                        <span>{{ $category->description }}</span>
-                                                    </span>
-                                                    <small class="text-secondary text-end">
-                                                        @if ($remaining !== null)
-                                                            {{ $remaining < 0 ? '-' : '' }}R$ {{ number_format(abs($remaining), 2, ',', '.') }}
-                                                        @else
-                                                            sem orçamento
-                                                        @endif
-                                                    </small>
-                                                </button>
-                                            </li>
-                                        @endforeach
-                                    </ul>
-                                </div>
-                                @error('category_id')
                                     <div class="text-danger mt-2">{{ $message }}</div>
                                 @enderror
                             </div>
@@ -215,6 +157,64 @@
                                         </div>
                                     </div>
                                 @endif
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label" for="category_id">Categoria</label>
+                                @php
+                                    $selectedCategory = $categories->firstWhere('id', $category_id);
+                                @endphp
+                                <div class="dropdown w-100">
+                                    <button
+                                        class="btn btn-outline-secondary dropdown-toggle w-100 text-start d-flex align-items-center justify-content-between"
+                                        type="button"
+                                        data-bs-toggle="dropdown"
+                                        aria-expanded="false"
+                                    >
+                                        <span class="d-inline-flex align-items-center">
+                                            @if ($selectedCategory)
+                                                <span class="d-inline-block rounded-circle me-2" style="width: 10px; height: 10px; background: {{ $selectedCategory->color }}; border: 1px solid #dee2e6;"></span>
+                                                <span>{{ $selectedCategory->description }}</span>
+                                            @else
+                                                <span class="text-secondary">Selecione</span>
+                                            @endif
+                                        </span>
+                                    </button>
+                                    <ul class="dropdown-menu w-100" style="max-height: 260px; overflow-y: auto;">
+                                        @foreach ($categories as $category)
+                                            @php
+                                                $remaining = $remainingByCategory[$category->id] ?? null;
+                                                $isCategoryUsedAsSubcategory = collect($subcategories)
+                                                    ->pluck('category_id')
+                                                    ->map(fn ($id) => (int) $id)
+                                                    ->contains($category->id);
+                                            @endphp
+                                            <li>
+                                                <button
+                                                    type="button"
+                                                    class="dropdown-item d-flex justify-content-between align-items-start gap-2"
+                                                    wire:click="$set('category_id', {{ $category->id }})"
+                                                    @disabled($isCategoryUsedAsSubcategory)
+                                                >
+                                                    <span class="d-inline-flex align-items-center">
+                                                        <span class="d-inline-block rounded-circle me-2" style="width: 10px; height: 10px; background: {{ $category->color }}; border: 1px solid #dee2e6;"></span>
+                                                        <span>{{ $category->description }}</span>
+                                                    </span>
+                                                    <small class="text-secondary text-end">
+                                                        @if ($remaining !== null)
+                                                            {{ $remaining < 0 ? '-' : '' }}R$ {{ number_format(abs($remaining), 2, ',', '.') }}
+                                                        @else
+                                                            sem orçamento
+                                                        @endif
+                                                    </small>
+                                                </button>
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                </div>
+                                @error('category_id')
+                                    <div class="text-danger mt-2">{{ $message }}</div>
+                                @enderror
                             </div>
 
                             <div class="mb-3">

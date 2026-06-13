@@ -11,6 +11,7 @@ use App\Models\PurchaseCategoryAllocation;
 use App\Support\BudgetPeriod;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Livewire\Component;
 
 class CreateModal extends Component
@@ -206,6 +207,7 @@ class CreateModal extends Component
         $baseAmount = round($totalAmount / $installments, 2);
         $accumulated = 0.0;
         $baseReferenceDate = $this->resolveBaseReferenceDate($data['purchased_at'], $creditCard);
+        $installmentGroupId = $installments > 1 ? (string) Str::uuid() : null;
 
         for ($i = 1; $i <= $installments; $i++) {
             $amount = $i === $installments ? round($totalAmount - $accumulated, 2) : $baseAmount;
@@ -224,6 +226,9 @@ class CreateModal extends Component
                 'amount' => $amount,
                 'purchased_at' => $this->resolveInstallmentDate($household, $data['purchased_at'], $i),
                 'reference_date' => $baseReferenceDate->copy()->addMonthsNoOverflow($i - 1)->toDateString(),
+                'installment_group_id' => $installmentGroupId,
+                'installment_number' => $installments > 1 ? $i : null,
+                'installments_count' => $installments > 1 ? $installments : null,
             ]);
 
             $this->createSubcategoryAllocations($purchase, $installments, $i, $totalAmount);
@@ -520,6 +525,22 @@ class CreateModal extends Component
         return $referenceDate;
     }
 
+    private function referenceDateForBudgetPreview($household): Carbon
+    {
+        $purchasedAt = $this->purchased_at ?: now()->toDateString();
+        $creditCard = null;
+
+        if ($this->payment_option && str_starts_with($this->payment_option, 'card:')) {
+            $creditCard = CreditCard::query()
+                ->where('id', (int) str_replace('card:', '', $this->payment_option))
+                ->where('household_id', $household->id)
+                ->where('is_active', true)
+                ->first();
+        }
+
+        return $this->resolveBaseReferenceDate($purchasedAt, $creditCard);
+    }
+
     private function spentByCategory(int $householdId, string $start, string $end)
     {
         $allocationTotalsByPurchase = DB::table('purchase_category_allocations')
@@ -591,13 +612,14 @@ class CreateModal extends Component
                 ->get();
 
             $categoryIds = $categories->pluck('id');
-            $period = BudgetPeriod::forHousehold($household, now());
+            $referenceDate = $this->referenceDateForBudgetPreview($household);
+            $period = BudgetPeriod::forHousehold($household, $referenceDate);
 
             $budgets = CategoryBudget::query()
                 ->whereIn('category_id', $categoryIds)
-                ->where(function ($query) {
+                ->where(function ($query) use ($period) {
                     $query->whereNull('effective_at')
-                        ->orWhere('effective_at', '<=', now()->toDateString());
+                        ->orWhere('effective_at', '<=', $period['end']->toDateString());
                 })
                 ->orderByRaw('COALESCE(effective_at, created_at) DESC')
                 ->orderByDesc('created_at')
