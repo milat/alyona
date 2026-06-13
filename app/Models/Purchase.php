@@ -22,12 +22,17 @@ class Purchase extends Model
         'amount',
         'purchased_at',
         'reference_date',
+        'installment_group_id',
+        'installment_number',
+        'installments_count',
     ];
 
     protected $casts = [
         'amount' => 'decimal:2',
         'purchased_at' => 'date',
         'reference_date' => 'date',
+        'installment_number' => 'integer',
+        'installments_count' => 'integer',
     ];
 
     protected static function booted(): void
@@ -77,6 +82,12 @@ class Purchase extends Model
     public function categoryAllocations(): HasMany
     {
         return $this->hasMany(PurchaseCategoryAllocation::class);
+    }
+
+
+    public function isInstallmentGroup(): bool
+    {
+        return $this->installment_group_id !== null && (int) $this->installments_count > 1;
     }
 
     public function primaryCategoryAmount(): float

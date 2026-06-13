@@ -30,6 +30,10 @@ class Index extends Component
 
     public bool $showSort = false;
 
+    public bool $showSum = false;
+
+    public array $selectedPurchaseIds = [];
+
     public string $sortBy = 'date';
 
     public string $sortDirection = 'desc';
@@ -52,7 +56,7 @@ class Index extends Component
         // Livewire re-renders the component after handling the event.
     }
 
-    public function delete(int $purchaseId): void
+    public function delete(int $purchaseId, bool $deleteInstallments = false): void
     {
         $user = auth()->user();
 
@@ -61,14 +65,37 @@ class Index extends Component
             ->where('household_id', $user->household_id)
             ->firstOrFail();
 
+        if ($deleteInstallments && $purchase->isInstallmentGroup()) {
+            Purchase::query()
+                ->where('household_id', $user->household_id)
+                ->where('installment_group_id', $purchase->installment_group_id)
+                ->delete();
+
+            session()->flash('success', 'Parcelas excluidas com sucesso.');
+            $this->resetSumSelection();
+
+            return;
+        }
+
         $purchase->delete();
+        $this->resetSumSelection();
 
         session()->flash('success', 'Compra excluida com sucesso.');
     }
 
     public function updatedSelectedMonth(): void
     {
-        // Livewire re-renders the component after the month changes.
+        $this->resetSumSelection();
+    }
+
+    public function updatedSelectedPurchaseIds(): void
+    {
+        $this->selectedPurchaseIds = collect($this->selectedPurchaseIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
     }
 
     public function toggleSearch(): void
@@ -81,11 +108,24 @@ class Index extends Component
         $this->showSort = ! $this->showSort;
     }
 
+    public function toggleSum(): void
+    {
+        $this->showSum = ! $this->showSum;
+        $this->selectedPurchaseIds = [];
+    }
+
+    public function selectMonth(string $month): void
+    {
+        $this->selectedMonth = $month;
+        $this->resetSumSelection();
+    }
+
     public function applyFilters(): void
     {
         $this->selectedCategoryId = $this->categoryFilterInput ?: null;
         $this->search = trim($this->searchInput);
         $this->showSearch = false;
+        $this->resetSumSelection();
     }
 
     public function clearFilters(): void
@@ -95,6 +135,7 @@ class Index extends Component
         $this->search = '';
         $this->searchInput = '';
         $this->showSearch = false;
+        $this->resetSumSelection();
     }
 
     public function applySort(): void
@@ -105,6 +146,7 @@ class Index extends Component
         $this->sortBy = in_array($this->sortByInput, $allowedSorts, true) ? $this->sortByInput : 'date';
         $this->sortDirection = in_array($this->sortDirectionInput, $allowedDirections, true) ? $this->sortDirectionInput : 'desc';
         $this->showSort = false;
+        $this->resetSumSelection();
     }
 
     public function clearSort(): void
@@ -114,6 +156,7 @@ class Index extends Component
         $this->sortByInput = 'date';
         $this->sortDirectionInput = 'desc';
         $this->showSort = false;
+        $this->resetSumSelection();
     }
 
     public function render()
@@ -123,6 +166,11 @@ class Index extends Component
         $monthOptions = collect();
         $categoryOptions = collect();
         $filteredTotal = 0;
+        $selectedTotal = 0;
+        $nextMonthTotal = 0;
+        $nextMonthValue = null;
+        $nextMonthLabel = '';
+        $showNextMonthTotal = false;
 
         if ($user && $user->household_id !== null) {
             $household = $user->household;
@@ -141,6 +189,19 @@ class Index extends Component
                         : $monthOptions->first()['value'];
                 }
             }
+
+            $nextMonth = Carbon::createFromFormat('Y-m', $currentMonth)->addMonthNoOverflow();
+            $nextMonthValue = $nextMonth->format('Y-m');
+            $nextMonthPeriod = BudgetPeriod::forYearMonth($household, (int) $nextMonth->format('Y'), (int) $nextMonth->format('m'));
+            $nextMonthTotal = (float) Purchase::query()
+                ->where('household_id', $user->household_id)
+                ->whereBetween('reference_date', [
+                    $nextMonthPeriod['start']->toDateString(),
+                    $nextMonthPeriod['end']->toDateString(),
+                ])
+                ->sum('amount');
+            $nextMonthLabel = $this->formatMonthName($nextMonth);
+            $showNextMonthTotal = $this->selectedMonth === $currentMonth;
 
             $categoryIdsWithPurchases = collect();
 
@@ -224,6 +285,20 @@ class Index extends Component
             $this->applySorting($query);
             $purchases = $query->get();
 
+            $visiblePurchaseIds = $purchases->pluck('id')->map(fn ($id) => (int) $id)->all();
+            $this->selectedPurchaseIds = collect($this->selectedPurchaseIds)
+                ->map(fn ($id) => (int) $id)
+                ->intersect($visiblePurchaseIds)
+                ->values()
+                ->all();
+
+            if ($this->selectedPurchaseIds !== []) {
+                $selectedTotal = (float) Purchase::query()
+                    ->where('household_id', $user->household_id)
+                    ->whereIn('id', $this->selectedPurchaseIds)
+                    ->sum('amount');
+            }
+
             if ($purchases->isEmpty() && $this->hasActiveFilters()) {
                 $this->showSearch = true;
             }
@@ -234,7 +309,17 @@ class Index extends Component
             'monthOptions' => $monthOptions,
             'categoryOptions' => $categoryOptions,
             'filteredTotal' => $filteredTotal,
+            'selectedTotal' => $selectedTotal,
+            'nextMonthTotal' => $nextMonthTotal,
+            'nextMonthValue' => $nextMonthValue,
+            'nextMonthLabel' => $nextMonthLabel,
+            'showNextMonthTotal' => $showNextMonthTotal,
         ]);
+    }
+
+    private function resetSumSelection(): void
+    {
+        $this->selectedPurchaseIds = [];
     }
 
 
@@ -252,6 +337,7 @@ class Index extends Component
             ->toBase()
             ->map(fn (Purchase $purchase) => BudgetPeriod::forHousehold($household, $purchase->reference_date)['period_month'])
             ->push($currentMonth)
+            ->push($currentMonthDate->copy()->addMonthNoOverflow()->format('Y-m'))
             ->unique()
             ->filter(fn (string $value) => $value >= $windowStart && $value <= $windowEnd)
             ->sortDesc()
@@ -269,6 +355,11 @@ class Index extends Component
 
     private function formatMonthLabel(Carbon $date): string
     {
+        return $this->formatMonthName($date) . ' / ' . $date->format('Y');
+    }
+
+    private function formatMonthName(Carbon $date): string
+    {
         $months = [
             1 => 'Janeiro',
             2 => 'Fevereiro',
@@ -284,7 +375,7 @@ class Index extends Component
             12 => 'Dezembro',
         ];
 
-        return $months[(int) $date->format('n')] . ' / ' . $date->format('Y');
+        return $months[(int) $date->format('n')];
     }
 
 

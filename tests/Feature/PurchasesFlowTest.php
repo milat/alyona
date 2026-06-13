@@ -6,6 +6,7 @@ use App\Livewire\Purchases\CreateModal;
 use App\Livewire\Purchases\EditForm;
 use App\Livewire\Purchases\Index;
 use App\Models\Category;
+use App\Models\CategoryBudget;
 use App\Models\CreditCard;
 use App\Models\Household;
 use App\Models\PaymentMethod;
@@ -63,6 +64,10 @@ class PurchasesFlowTest extends TestCase
         $this->assertSame('100.00', $purchases[1]->amount);
         $this->assertSame('100.00', $purchases[2]->amount);
         $this->assertTrue($purchases->every(fn (Purchase $purchase) => $purchase->credit_card_id === $creditCard->id));
+        $this->assertNotNull($purchases[0]->installment_group_id);
+        $this->assertTrue($purchases->every(fn (Purchase $purchase) => $purchase->installment_group_id === $purchases[0]->installment_group_id));
+        $this->assertSame([1, 2, 3], $purchases->pluck('installment_number')->all());
+        $this->assertTrue($purchases->every(fn (Purchase $purchase) => $purchase->installments_count === 3));
     }
 
     public function test_credit_purchase_in_legacy_household_uses_calendar_month_installments(): void
@@ -225,6 +230,94 @@ class PurchasesFlowTest extends TestCase
             ->set('selectedMonth', '2026-01')
             ->assertSee('Categoria A')
             ->assertDontSee('Categoria B');
+
+        $this->travelBack();
+    }
+
+    public function test_current_month_shows_next_month_partial_total_link(): void
+    {
+        $this->travelTo(now()->setDate(2026, 1, 10));
+
+        $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
+        $category = $this->createCategory($user, true, 'Mercado');
+        $pix = PaymentMethod::create(['name' => 'Pix']);
+
+        Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $category->id,
+            'payment_method_id' => $pix->id,
+            'title' => 'Compra atual',
+            'amount' => 10,
+            'purchased_at' => '2026-01-10',
+            'reference_date' => '2026-01-01',
+        ]);
+
+        Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $category->id,
+            'payment_method_id' => $pix->id,
+            'title' => 'Compra próxima',
+            'amount' => 123.45,
+            'purchased_at' => '2026-01-20',
+            'reference_date' => '2026-02-01',
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(Index::class)
+            ->assertSet('selectedMonth', '2026-01')
+            ->assertSee('Total parcial para Fevereiro: R$ 123,45')
+            ->call('selectMonth', '2026-02')
+            ->assertSet('selectedMonth', '2026-02')
+            ->assertSee('Compra próxima')
+            ->assertDontSee('Total parcial para Fevereiro: R$ 123,45');
+
+        $this->travelBack();
+    }
+
+    public function test_purchase_sum_mode_totals_selected_purchases_and_resets_when_closed(): void
+    {
+        $this->travelTo(now()->setDate(2026, 1, 10));
+
+        $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
+        $category = $this->createCategory($user, true, 'Mercado');
+        $pix = PaymentMethod::create(['name' => 'Pix']);
+
+        $firstPurchase = Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $category->id,
+            'payment_method_id' => $pix->id,
+            'title' => 'Compra A',
+            'amount' => 10.50,
+            'purchased_at' => '2026-01-10',
+            'reference_date' => '2026-01-01',
+        ]);
+
+        $secondPurchase = Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $category->id,
+            'payment_method_id' => $pix->id,
+            'title' => 'Compra B',
+            'amount' => 20.25,
+            'purchased_at' => '2026-01-11',
+            'reference_date' => '2026-01-01',
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(Index::class)
+            ->set('selectedMonth', '2026-01')
+            ->call('toggleSum')
+            ->assertSet('showSum', true)
+            ->assertSee('Total selecionado')
+            ->assertSee('R$ 0,00')
+            ->set('selectedPurchaseIds', [$firstPurchase->id, $secondPurchase->id])
+            ->assertSee('R$ 30,75')
+            ->call('toggleSum')
+            ->assertSet('showSum', false)
+            ->assertSet('selectedPurchaseIds', []);
 
         $this->travelBack();
     }
@@ -607,6 +700,126 @@ class PurchasesFlowTest extends TestCase
             'category_id' => $newSubCategory->id,
             'amount' => 40.00,
         ]);
+    }
+
+    public function test_create_purchase_credit_budget_remaining_uses_reference_month(): void
+    {
+        $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
+        $category = $this->createCategory($user, true, 'Mercado');
+        PaymentMethod::create(['name' => 'Crédito']);
+        $creditCard = CreditCard::create([
+            'household_id' => $user->household_id,
+            'title' => 'Nubank',
+            'closing_day' => 10,
+            'is_active' => true,
+        ]);
+
+        CategoryBudget::create([
+            'category_id' => $category->id,
+            'amount' => 100,
+            'effective_at' => '2026-01-01',
+        ]);
+
+        CategoryBudget::create([
+            'category_id' => $category->id,
+            'amount' => 200,
+            'effective_at' => '2026-02-01',
+        ]);
+
+        Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $category->id,
+            'payment_method_id' => PaymentMethod::query()->where('name', 'Crédito')->first()->id,
+            'credit_card_id' => $creditCard->id,
+            'title' => 'Compra fevereiro',
+            'amount' => 50,
+            'purchased_at' => '2026-01-20',
+            'reference_date' => '2026-02-01',
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(CreateModal::class)
+            ->set('title', 'Compra nova')
+            ->set('payment_option', 'card:' . $creditCard->id)
+            ->set('amount', '10,00')
+            ->set('purchased_at', '2026-01-15')
+            ->set('category_id', $category->id)
+            ->call('openConfirm')
+            ->assertSee('Restante: R$ 150,00');
+    }
+
+    public function test_delete_purchase_can_remove_all_installments(): void
+    {
+        $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
+        $category = $this->createCategory($user, true, 'Lazer');
+        PaymentMethod::create(['name' => 'Crédito']);
+        $creditCard = CreditCard::create([
+            'household_id' => $user->household_id,
+            'title' => 'Nubank',
+            'closing_day' => 10,
+            'is_active' => true,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(CreateModal::class)
+            ->set('title', 'TV')
+            ->set('category_id', $category->id)
+            ->set('payment_option', 'card:' . $creditCard->id)
+            ->set('amount', '300,00')
+            ->set('installments', '3')
+            ->set('purchased_at', '2026-01-15')
+            ->call('save');
+
+        $purchase = Purchase::query()->firstOrFail();
+
+        Livewire::actingAs($user)
+            ->test(Index::class)
+            ->call('delete', $purchase->id, true);
+
+        $this->assertSame(0, Purchase::query()->count());
+    }
+
+    public function test_edit_purchase_can_update_all_installments(): void
+    {
+        $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
+        $oldCategory = $this->createCategory($user, true, 'Lazer');
+        $newCategory = $this->createCategory($user, true, 'Mercado');
+        PaymentMethod::create(['name' => 'Crédito']);
+        $creditCard = CreditCard::create([
+            'household_id' => $user->household_id,
+            'title' => 'Nubank',
+            'closing_day' => 10,
+            'is_active' => true,
+        ]);
+
+        Livewire::actingAs($user)
+            ->test(CreateModal::class)
+            ->set('title', 'TV')
+            ->set('category_id', $oldCategory->id)
+            ->set('payment_option', 'card:' . $creditCard->id)
+            ->set('amount', '300,00')
+            ->set('installments', '3')
+            ->set('purchased_at', '2026-01-15')
+            ->call('save');
+
+        $firstPurchase = Purchase::query()->orderBy('id')->firstOrFail();
+
+        Livewire::actingAs($user)
+            ->test(EditForm::class, ['purchaseId' => $firstPurchase->id])
+            ->set('title', 'Televisão 1/3')
+            ->set('category_id', $newCategory->id)
+            ->set('payment_option', 'card:' . $creditCard->id)
+            ->set('amount', '150,00')
+            ->set('purchased_at', '2026-02-15')
+            ->call('save', true);
+
+        $purchases = Purchase::query()->orderBy('installment_number')->get();
+
+        $this->assertSame(['Televisão 1/3', 'Televisão 2/3', 'Televisão 3/3'], $purchases->pluck('title')->all());
+        $this->assertTrue($purchases->every(fn (Purchase $purchase) => $purchase->category_id === $newCategory->id));
+        $this->assertTrue($purchases->every(fn (Purchase $purchase) => $purchase->amount === '150.00'));
+        $this->assertSame(['2026-03-01', '2026-04-01', '2026-05-01'], $purchases->map(fn (Purchase $purchase) => $purchase->reference_date->toDateString())->all());
     }
 
     private function createUserInHousehold(string $budgetPeriodType): User

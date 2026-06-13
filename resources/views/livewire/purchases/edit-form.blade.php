@@ -1,4 +1,4 @@
-<form class="mt-4" wire:submit.prevent="save">
+<form class="mt-4" wire:submit.prevent="save(false)">
     <div class="mb-3">
         <label class="form-label" for="title">Título</label>
         <input id="title" type="text" class="form-control" wire:model.defer="title" required>
@@ -148,13 +148,38 @@
         @enderror
     </div>
 
-    <button type="submit" class="btn btn-warning w-100" wire:loading.attr="disabled">
-        <span wire:loading.remove>Atualizar compra</span>
-        <span wire:loading>
-            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-            Atualizando...
-        </span>
-    </button>
+    @if ($hasInstallmentGroup)
+        <div class="d-grid gap-2">
+            <button type="submit" class="btn btn-outline-warning" wire:loading.attr="disabled">
+                <span wire:loading.remove>Atualizar apenas esta parcela</span>
+                <span wire:loading>
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Atualizando...
+                </span>
+            </button>
+            <button
+                type="button"
+                class="btn btn-warning"
+                wire:click="save(true)"
+                wire:loading.attr="disabled"
+                onclick="if(!confirm('Deseja aplicar esta alteração em todas as parcelas desta compra?')){event.stopImmediatePropagation();}"
+            >
+                <span wire:loading.remove>Atualizar todas as parcelas</span>
+                <span wire:loading>
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    Atualizando...
+                </span>
+            </button>
+        </div>
+    @else
+        <button type="submit" class="btn btn-warning w-100" wire:loading.attr="disabled">
+            <span wire:loading.remove>Atualizar compra</span>
+            <span wire:loading>
+                <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                Atualizando...
+            </span>
+        </button>
+    @endif
 
     @once
         <script>

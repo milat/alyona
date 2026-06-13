@@ -19,6 +19,17 @@
                             <span class="alyona-loading-gif" aria-hidden="true"></span>
                             <span class="small text-secondary">Carregando...</span>
                         </div>
+                        @if ($showNextMonthTotal && $nextMonthValue)
+                            <button
+                                type="button"
+                                class="btn btn-link btn-sm p-0 mt-1 text-secondary text-decoration-none d-block ms-auto text-end"
+                                wire:click="selectMonth('{{ $nextMonthValue }}')"
+                                wire:loading.attr="disabled"
+                                wire:target="selectMonth"
+                            >
+                                Total parcial para {{ $nextMonthLabel }}: R$ {{ number_format($nextMonthTotal, 2, ',', '.') }}
+                            </button>
+                        @endif
                     </div>
                 @endif
             </div>
@@ -44,6 +55,15 @@
                             aria-expanded="{{ $showSort ? 'true' : 'false' }}"
                         >
                             <i class="bi bi-sort-down"></i>
+                        </button>
+                        <button
+                            type="button"
+                            class="btn btn-sm {{ $showSum ? 'btn-primary' : 'btn-outline-dark' }}"
+                            wire:click="toggleSum"
+                            aria-label="Somar compras"
+                            aria-pressed="{{ $showSum ? 'true' : 'false' }}"
+                        >
+                            <i class="bi bi-plus-lg"></i>
                         </button>
                     </div>
                     <div class="text-end">
@@ -121,6 +141,9 @@
                 <table class="table table-striped align-middle">
                     <thead>
                         <tr>
+                            @if ($showSum)
+                                <th class="text-center" style="width: 42px;">Somar</th>
+                            @endif
                             <th>Data</th>
                             <th>Título</th>
                             <th>Categoria</th>
@@ -132,6 +155,17 @@
                     <tbody>
                         @foreach ($purchases as $purchase)
                             <tr>
+                                @if ($showSum)
+                                    <td class="text-center">
+                                        <input
+                                            type="checkbox"
+                                            class="form-check-input"
+                                            value="{{ $purchase->id }}"
+                                            wire:model.live="selectedPurchaseIds"
+                                            aria-label="Somar compra {{ $purchase->title }}"
+                                        >
+                                    </td>
+                                @endif
                                 <td>
                                     <button
                                         type="button"
@@ -146,7 +180,30 @@
                                 </td>
                                 <td>
                                     {{ $purchase->title }}
-                                    @if ($purchase->description)
+                                    @if ($purchase->isInstallmentGroup())
+                    <div class="modal fade" id="delete-installment-{{ $purchase->id }}" tabindex="-1" aria-hidden="true" wire:ignore.self>
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Excluir parcela</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <p class="mb-0">Esta compra faz parte de um parcelamento. Deseja excluir apenas esta parcela ou todas as parcelas?</p>
+                                </div>
+                                <div class="modal-footer d-flex justify-content-between gap-2">
+                                    <button type="button" class="btn btn-outline-dark" data-bs-dismiss="modal">Cancelar</button>
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-outline-danger" data-bs-dismiss="modal" wire:click="delete({{ $purchase->id }}, false)">Só esta</button>
+                                        <button type="button" class="btn btn-danger" data-bs-dismiss="modal" wire:click="delete({{ $purchase->id }}, true)">Todas</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                @endif
+
+                @if ($purchase->description)
                                         <button
                                             type="button"
                                             class="btn btn-link btn-sm p-0 ms-1 align-baseline"
@@ -213,17 +270,31 @@
                                         >
                                             <i class="bi bi-pencil"></i>
                                         </a>
-                                        <button
-                                            type="button"
-                                            class="btn btn-outline-danger btn-sm"
-                                            wire:click="delete({{ $purchase->id }})"
-                                            wire:loading.attr="disabled"
-                                            onclick="if(!confirm('Tem certeza que deseja excluir esta compra?')){event.stopImmediatePropagation();}"
-                                            aria-label="Excluir compra"
-                                            title="Excluir"
-                                        >
-                                            <i class="bi bi-trash"></i>
-                                        </button>
+                                        @if ($purchase->isInstallmentGroup())
+                                            <button
+                                                type="button"
+                                                class="btn btn-outline-danger btn-sm"
+                                                data-bs-toggle="modal"
+                                                data-bs-target="#delete-installment-{{ $purchase->id }}"
+                                                wire:loading.attr="disabled"
+                                                aria-label="Excluir compra"
+                                                title="Excluir"
+                                            >
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        @else
+                                            <button
+                                                type="button"
+                                                class="btn btn-outline-danger btn-sm"
+                                                wire:click="delete({{ $purchase->id }})"
+                                                wire:loading.attr="disabled"
+                                                onclick="if(!confirm('Tem certeza que deseja excluir esta compra?')){event.stopImmediatePropagation();}"
+                                                aria-label="Excluir compra"
+                                                title="Excluir"
+                                            >
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        @endif
                                     </div>
                                 </td>
                             </tr>
@@ -231,6 +302,13 @@
                     </tbody>
                 </table>
             </div>
+            @if ($showSum)
+                <div class="alyona-selected-total shadow-lg rounded-pill bg-dark text-white px-4 py-3">
+                    <div class="small text-white-50 lh-1 mb-1">Total selecionado</div>
+                    <div class="fs-5 fw-bold lh-1">R$ {{ number_format($selectedTotal, 2, ',', '.') }}</div>
+                </div>
+            @endif
+
             @foreach ($purchases as $purchase)
                 <div class="modal fade" id="purchase-date-{{ $purchase->id }}" tabindex="-1" aria-hidden="true" wire:ignore.self>
                     <div class="modal-dialog">
@@ -333,6 +411,16 @@
                 border-top-color: #0d6efd;
                 border-radius: 50%;
                 animation: alyona-loading-spin 0.65s linear infinite;
+            }
+
+            .alyona-selected-total {
+                position: fixed;
+                left: 50%;
+                bottom: 4.25rem;
+                z-index: 1040;
+                transform: translateX(-50%);
+                min-width: 230px;
+                text-align: center;
             }
 
             @keyframes alyona-loading-spin {
