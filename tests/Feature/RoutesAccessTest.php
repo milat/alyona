@@ -19,6 +19,7 @@ class RoutesAccessTest extends TestCase
         $this->get(route('register'))->assertOk();
 
         $this->get(route('categories.index'))->assertRedirect(route('login'));
+        $this->get(route('dashboard.index'))->assertRedirect(route('login'));
         $this->get(route('purchases.index'))->assertRedirect(route('login'));
         $this->get(route('incomes.index'))->assertRedirect(route('login'));
         $this->get(route('households.create'))->assertRedirect(route('login'));
@@ -59,6 +60,10 @@ class RoutesAccessTest extends TestCase
 
         $this->actingAs($user)
             ->get(route('categories.edit', $category))
+            ->assertOk();
+
+        $this->actingAs($user)
+            ->get(route('dashboard.index'))
             ->assertOk();
 
         $this->actingAs($user)

@@ -12,6 +12,7 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    Route::view('/dashboard', 'dashboard.index')->name('dashboard.index');
     Route::view('/households/create', 'households.create')->name('households.create');
     Route::view('/households/invitations/create', 'households.invite')->name('households.invitations.create');
     Route::view('/categories', 'categories.index')->name('categories.index');
