@@ -15,7 +15,7 @@
             @endphp
 
             @if ($hasHousehold)
-                <livewire:dashboard.period-summary />
+                <livewire:home.summary />
 
                 <button
                     type="button"

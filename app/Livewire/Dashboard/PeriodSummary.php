@@ -10,10 +10,12 @@ use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\On;
+use Livewire\Attributes\Url;
 use Livewire\Component;
 
 class PeriodSummary extends Component
 {
+    #[Url(as: 'mes', except: null)]
     public ?string $selectedMonth = null;
 
     #[On('purchase-saved')]
