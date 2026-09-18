@@ -9,6 +9,7 @@ use App\Models\Purchase;
 use App\Models\PurchaseCategoryAllocation;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\Rule;
 use Livewire\Component;
 
 class EditForm extends Component
@@ -22,6 +23,7 @@ class EditForm extends Component
     public ?int $credit_card_id = null;
     public ?string $amount = null;
     public string $purchased_at = '';
+    public string $reference_month = '';
     public array $subcategories = [];
     public ?int $subcategoryCalculatorIndex = null;
     public string $subcategoryCalculatorExpression = '';
@@ -48,6 +50,7 @@ class EditForm extends Component
             : 'method:' . $purchase->payment_method_id;
         $this->amount = number_format((float) $purchase->amount, 2, ',', '.');
         $this->purchased_at = $purchase->purchased_at->toDateString();
+        $this->reference_month = ($purchase->reference_date ?? $purchase->purchased_at)->format('Y-m');
         $this->subcategories = $purchase->categoryAllocations()
             ->get(['category_id', 'amount'])
             ->map(fn (PurchaseCategoryAllocation $allocation) => [
@@ -141,6 +144,24 @@ class EditForm extends Component
             return;
         }
 
+        $referenceDate = $this->resolveReferenceDate($data['purchased_at'], $paymentSelection['credit_card']);
+        if ($paymentSelection['credit_card']) {
+            $this->validate([
+                'reference_month' => ['required', Rule::in(array_keys($this->referenceMonthOptions($purchase)))],
+            ]);
+
+            $originalMonth = ($purchase->reference_date ?? $purchase->purchased_at)->format('Y-m');
+            $paymentOrDateChanged = $purchase->credit_card_id !== $paymentSelection['credit_card']->id
+                || $purchase->purchased_at->toDateString() !== Carbon::parse($data['purchased_at'])->toDateString();
+
+            if ($this->reference_month !== $originalMonth || ! $paymentOrDateChanged) {
+                $referenceDate = Carbon::createFromFormat('!Y-m', $this->reference_month);
+                if ($applyToInstallments && $purchase->isInstallmentGroup()) {
+                    $referenceDate->subMonthsNoOverflow(max(0, (int) $purchase->installment_number - 1));
+                }
+            }
+        }
+
         if ($applyToInstallments && $purchase->isInstallmentGroup()) {
             $installments = Purchase::query()
                 ->where('household_id', $user->household_id)
@@ -150,11 +171,11 @@ class EditForm extends Component
                 ->orderBy('id')
                 ->get();
 
-            $this->updateInstallments($installments, $data, $category->id, $paymentSelection);
+            $this->updateInstallments($installments, $data, $category->id, $paymentSelection, $referenceDate);
 
             session()->flash('success', 'Parcelas atualizadas com sucesso.');
         } else {
-            $this->updatePurchase($purchase, $data, $category->id, $paymentSelection);
+            $this->updatePurchase($purchase, $data, $category->id, $paymentSelection, $referenceDate);
 
             session()->flash('success', 'Compra atualizada com sucesso.');
         }
@@ -163,9 +184,8 @@ class EditForm extends Component
     }
 
 
-    private function updateInstallments(Collection $installments, array $data, int $categoryId, array $paymentSelection): void
+    private function updateInstallments(Collection $installments, array $data, int $categoryId, array $paymentSelection, Carbon $baseReferenceDate): void
     {
-        $baseReferenceDate = $this->resolveReferenceDate($data['purchased_at'], $paymentSelection['credit_card']);
         $baseTitle = $this->baseInstallmentTitle($data['title']);
         $count = $installments->count();
 
@@ -289,6 +309,19 @@ class EditForm extends Component
         return null;
     }
 
+    private function referenceMonthOptions(Purchase $purchase): array
+    {
+        $current = ($purchase->reference_date ?? $purchase->purchased_at)->copy()->startOfMonth();
+        $options = [];
+
+        foreach ([-1, 0, 1] as $offset) {
+            $month = $current->copy()->addMonthsNoOverflow($offset);
+            $options[$month->format('Y-m')] = $month->locale('pt_BR')->translatedFormat('F/Y');
+        }
+
+        return $options;
+    }
+
     public function render()
     {
         $user = auth()->user();
@@ -361,6 +394,9 @@ class EditForm extends Component
             'paymentMethods' => $paymentMethods,
             'creditCards' => $creditCards,
             'paymentOptions' => $paymentOptions,
+            'referenceMonthOptions' => str_starts_with((string) $this->payment_option, 'card:')
+                ? $this->referenceMonthOptions($this->getPurchase($this->purchaseId))
+                : [],
         ]);
     }
 

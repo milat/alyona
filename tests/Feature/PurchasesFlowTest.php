@@ -178,6 +178,63 @@ class PurchasesFlowTest extends TestCase
         $this->assertSame('2026-03-01', $purchase->reference_date->toDateString());
     }
 
+    public function test_credit_reference_month_can_only_be_changed_to_adjacent_months(): void
+    {
+        $user = $this->createUserInHousehold(BudgetPeriod::CALENDAR_MONTH);
+        $category = $this->createCategory($user, true, 'Mercado');
+        $credit = PaymentMethod::create(['name' => 'Crédito']);
+        $debit = PaymentMethod::create(['name' => 'Débito']);
+        $card = CreditCard::create([
+            'household_id' => $user->household_id,
+            'title' => 'Visa',
+            'closing_day' => 10,
+            'is_active' => true,
+        ]);
+        $purchase = Purchase::create([
+            'household_id' => $user->household_id,
+            'user_id' => $user->id,
+            'category_id' => $category->id,
+            'payment_method_id' => $credit->id,
+            'credit_card_id' => $card->id,
+            'title' => 'Compra',
+            'amount' => 25,
+            'purchased_at' => '2026-12-15',
+            'reference_date' => '2027-01-01',
+        ]);
+
+        $form = Livewire::actingAs($user)
+            ->test(EditForm::class, ['purchaseId' => $purchase->id])
+            ->assertSet('reference_month', '2027-01')
+            ->assertSee('Mês de referência')
+            ->assertViewHas('referenceMonthOptions', fn ($options) => array_keys($options) === ['2026-12', '2027-01', '2027-02'])
+            ->set('reference_month', '2027-03')
+            ->call('save')
+            ->assertHasErrors('reference_month');
+
+        $this->assertSame('2027-01-01', $purchase->fresh()->reference_date->toDateString());
+
+        $form->set('amount', '25,00')->set('reference_month', '2026-12')->call('save')->assertHasNoErrors();
+        $this->assertSame('2026-12-01', $purchase->fresh()->reference_date->toDateString());
+
+        Livewire::test(EditForm::class, ['purchaseId' => $purchase->id])
+            ->call('save')->assertHasNoErrors();
+        $this->assertSame('2026-12-01', $purchase->fresh()->reference_date->toDateString());
+
+        Livewire::test(EditForm::class, ['purchaseId' => $purchase->id])
+            ->set('reference_month', '2027-01')->call('save')->assertHasNoErrors();
+        $this->assertSame('2027-01-01', $purchase->fresh()->reference_date->toDateString());
+
+        Livewire::test(EditForm::class, ['purchaseId' => $purchase->id])
+            ->set('payment_option', 'method:' . $debit->id)
+            ->assertDontSee('Mês de referência')
+            ->set('reference_month', 'invalid')->call('save')->assertHasNoErrors();
+        $this->assertSame('2026-12-01', $purchase->fresh()->reference_date->toDateString());
+
+        Livewire::test(CreateModal::class)
+            ->set('payment_option', 'card:' . $card->id)
+            ->assertDontSee('id="reference_month"', false);
+    }
+
     public function test_cannot_save_purchase_with_inactive_category(): void
     {
         $this->expectException(ModelNotFoundException::class);
@@ -820,6 +877,18 @@ class PurchasesFlowTest extends TestCase
         $this->assertTrue($purchases->every(fn (Purchase $purchase) => $purchase->category_id === $newCategory->id));
         $this->assertTrue($purchases->every(fn (Purchase $purchase) => $purchase->amount === '150.00'));
         $this->assertSame(['2026-03-01', '2026-04-01', '2026-05-01'], $purchases->map(fn (Purchase $purchase) => $purchase->reference_date->toDateString())->all());
+
+        Livewire::actingAs($user)
+            ->test(EditForm::class, ['purchaseId' => $purchases[1]->id])
+            ->set('reference_month', '2026-05')
+            ->call('save', true)
+            ->assertHasNoErrors();
+
+        $this->assertSame(
+            ['2026-04-01', '2026-05-01', '2026-06-01'],
+            Purchase::query()->orderBy('installment_number')->get()
+                ->map(fn (Purchase $purchase) => $purchase->reference_date->toDateString())->all()
+        );
     }
 
     private function createUserInHousehold(string $budgetPeriodType): User

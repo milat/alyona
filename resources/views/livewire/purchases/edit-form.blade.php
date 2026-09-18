@@ -25,7 +25,7 @@
 
     <div class="mb-3">
         <label class="form-label" for="payment_option">Meio de pagamento</label>
-        <select id="payment_option" class="form-select" wire:model.defer="payment_option" required>
+        <select id="payment_option" class="form-select" wire:model.live="payment_option" required>
             <option value="">Selecione</option>
             @foreach ($paymentOptions as $option)
                 <option value="{{ $option['value'] }}">{{ $option['label'] }}</option>
@@ -35,6 +35,20 @@
             <div class="text-danger mt-2">{{ $message }}</div>
         @enderror
     </div>
+
+    @if ($referenceMonthOptions)
+        <div class="mb-3">
+            <label class="form-label" for="reference_month">Mês de referência</label>
+            <select id="reference_month" class="form-select" wire:model="reference_month" required>
+                @foreach ($referenceMonthOptions as $value => $label)
+                    <option value="{{ $value }}">{{ $label }}</option>
+                @endforeach
+            </select>
+            @error('reference_month')
+                <div class="text-danger mt-2">{{ $message }}</div>
+            @enderror
+        </div>
+    @endif
 
     <div class="mb-3">
         <label class="form-label" for="amount">Valor (R$)</label>
